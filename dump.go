@@ -119,21 +119,22 @@ func getTables(db *sql.DB) ([]string, error) {
 
 	// Read result
 	for rows.Next() {
-		var table string
+		var table sql.NullString
 		if err := rows.Scan(&table); err != nil {
 			return tables, err
 		}
-		tables = append(tables, table)
+
+		tables = append(tables, table.String)
 	}
 	return tables, rows.Err()
 }
 
 func getServerVersion(db *sql.DB) (string, error) {
-	var server_version string
+	var server_version sql.NullString
 	if err := db.QueryRow("SELECT version()").Scan(&server_version); err != nil {
 		return "", err
 	}
-	return server_version, nil
+	return server_version.String, nil
 }
 
 func createTable(db *sql.DB, name string) (*table, error) {
@@ -153,17 +154,17 @@ func createTable(db *sql.DB, name string) (*table, error) {
 
 func createTableSQL(db *sql.DB, name string) (string, error) {
 	// Get table creation SQL
-	var table_return string
-	var table_sql string
+	var table_return sql.NullString
+	var table_sql sql.NullString
 	err := db.QueryRow("SHOW CREATE TABLE "+name).Scan(&table_return, &table_sql)
 	if err != nil {
 		return "", err
 	}
-	if table_return != name {
+	if table_return.String != name {
 		return "", errors.New("Returned table is not the same as requested table")
 	}
 
-	return table_sql, nil
+	return table_sql.String, nil
 }
 
 func createTableValues(db *sql.DB, name string) (string, error) {
@@ -187,7 +188,11 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 	data_text := make([]string, 0)
 	for rows.Next() {
 		// Init temp data storage
-		data := make([]string, len(columns))
+
+		//ptrs := make([]interface{}, len(columns))
+		//var ptrs []interface {} = make([]*sql.NullString, len(columns))
+
+		data := make([]*sql.NullString, len(columns))
 		ptrs := make([]interface{}, len(columns))
 		for i, _ := range data {
 			ptrs[i] = &data[i]
@@ -197,7 +202,16 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 		if err := rows.Scan(ptrs...); err != nil {
 			return "", err
 		}
-		data_text = append(data_text, "('"+strings.Join(data, "','")+"')")
+
+		dataStrings := make([]string, len(columns))
+
+		for key, value := range data {
+			if value != nil && value.Valid {
+				dataStrings[key] = value.String
+			}
+		}
+
+		data_text = append(data_text, "('"+strings.Join(dataStrings, "','")+"')")
 	}
 
 	return strings.Join(data_text, ","), rows.Err()
