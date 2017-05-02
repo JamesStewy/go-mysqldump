@@ -62,9 +62,11 @@ func (d *Dumper) Dump() error {
 
 	// Create .sql file
 	f, err := os.Create(p)
+
 	if err != nil {
 		return err
 	}
+
 	defer f.Close()
 
 	data := dump{
@@ -123,7 +125,6 @@ func getTables(db *sql.DB) ([]string, error) {
 		if err := rows.Scan(&table); err != nil {
 			return tables, err
 		}
-
 		tables = append(tables, table.String)
 	}
 	return tables, rows.Err()
@@ -157,6 +158,7 @@ func createTableSQL(db *sql.DB, name string) (string, error) {
 	var table_return sql.NullString
 	var table_sql sql.NullString
 	err := db.QueryRow("SHOW CREATE TABLE "+name).Scan(&table_return, &table_sql)
+
 	if err != nil {
 		return "", err
 	}
