@@ -273,7 +273,11 @@ func TestDumpOk(t *testing.T) {
 		dir: "/tmp/",
 	}
 
-	err = dumper.Dump()
+	path, err := dumper.Dump()
+
+	if path == "" {
+		t.Errorf("No empty path was expected while dumping the database")
+	}
 
 	if err != nil {
 		t.Errorf("error was not expected while dumping the database: %s", err)

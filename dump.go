@@ -51,20 +51,20 @@ UNLOCK TABLES;
 `
 
 // Creates a MYSQL Dump based on the options supplied through the dumper.
-func (d *Dumper) Dump() error {
+func (d *Dumper) Dump() (string, error) {
 	name := time.Now().Format(d.format)
 	p := path.Join(d.dir, name+".sql")
 
 	// Check dump directory
 	if e, _ := exists(p); e {
-		return errors.New("Dump '" + name + "' already exists.")
+		return p, errors.New("Dump '" + name + "' already exists.")
 	}
 
 	// Create .sql file
 	f, err := os.Create(p)
 
 	if err != nil {
-		return err
+		return p, err
 	}
 
 	defer f.Close()
@@ -76,13 +76,13 @@ func (d *Dumper) Dump() error {
 
 	// Get server version
 	if data.ServerVersion, err = getServerVersion(d.db); err != nil {
-		return err
+		return p, err
 	}
 
 	// Get tables
 	tables, err := getTables(d.db)
 	if err != nil {
-		return err
+		return p, err
 	}
 
 	// Get sql for each table
@@ -90,7 +90,7 @@ func (d *Dumper) Dump() error {
 		if t, err := createTable(d.db, name); err == nil {
 			data.Tables = append(data.Tables, t)
 		} else {
-			return err
+			return p, err
 		}
 	}
 
@@ -100,13 +100,13 @@ func (d *Dumper) Dump() error {
 	// Write dump to file
 	t, err := template.New("mysqldump").Parse(tmpl)
 	if err != nil {
-		return err
+		return p, err
 	}
 	if err = t.Execute(f, data); err != nil {
-		return err
+		return p, err
 	}
 
-	return nil
+	return p, nil
 }
 
 func getTables(db *sql.DB) ([]string, error) {
