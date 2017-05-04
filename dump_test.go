@@ -1,12 +1,12 @@
 package mysqldump
 
 import (
-	"testing"
 	"github.com/DATA-DOG/go-sqlmock"
-	"reflect"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"strings"
+	"testing"
 )
 
 func TestGetTablesOk(t *testing.T) {
@@ -18,12 +18,12 @@ func TestGetTablesOk(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
-		AddRow("Test_Table_1",).
+		AddRow("Test_Table_1").
 		AddRow("Test_Table_2")
 
 	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(rows)
 
-	result, err := getTables(db);
+	result, err := getTables(db)
 	if err != nil {
 		t.Errorf("error was not expected while updating stats: %s", err)
 	}
@@ -55,7 +55,7 @@ func TestGetTablesNil(t *testing.T) {
 
 	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(rows)
 
-	result, err := getTables(db);
+	result, err := getTables(db)
 	if err != nil {
 		t.Errorf("error was not expected while updating stats: %s", err)
 	}
@@ -81,11 +81,11 @@ func TestGetServerVersionOk(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"Version()"}).
-		AddRow("test_version",)
+		AddRow("test_version")
 
 	mock.ExpectQuery("^SELECT version()").WillReturnRows(rows)
 
-	result, err := getServerVersion(db);
+	result, err := getServerVersion(db)
 	if err != nil {
 		t.Errorf("error was not expected while updating stats: %s", err)
 	}
@@ -111,11 +111,11 @@ func TestCreateTableSQLOk(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1",)
+		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
 
 	mock.ExpectQuery("^SHOW CREATE TABLE Test_Table$").WillReturnRows(rows)
 
-	result, err := createTableSQL(db, "Test_Table");
+	result, err := createTableSQL(db, "Test_Table")
 
 	if err != nil {
 		t.Errorf("error was not expected while updating stats: %s", err)
@@ -133,7 +133,6 @@ func TestCreateTableSQLOk(t *testing.T) {
 	}
 }
 
-
 func TestCreateTableValuesOk(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -148,7 +147,7 @@ func TestCreateTableValuesOk(t *testing.T) {
 
 	mock.ExpectQuery("^SELECT (.+) FROM test$").WillReturnRows(rows)
 
-	result, err := createTableValues(db, "test");
+	result, err := createTableValues(db, "test")
 	if err != nil {
 		t.Errorf("error was not expected while updating stats: %s", err)
 	}
@@ -179,7 +178,7 @@ func TestCreateTableValuesNil(t *testing.T) {
 
 	mock.ExpectQuery("^SELECT (.+) FROM test$").WillReturnRows(rows)
 
-	result, err := createTableValues(db, "test");
+	result, err := createTableValues(db, "test")
 	if err != nil {
 		t.Errorf("error was not expected while updating stats: %s", err)
 	}
@@ -205,17 +204,16 @@ func TestCreateTableOk(t *testing.T) {
 	defer db.Close()
 
 	createTableRows := sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1",)
+		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
 
 	createTableValueRows := sqlmock.NewRows([]string{"id", "email", "name"}).
 		AddRow(1, nil, "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2")
 
-
 	mock.ExpectQuery("^SHOW CREATE TABLE Test_Table$").WillReturnRows(createTableRows)
 	mock.ExpectQuery("^SELECT (.+) FROM Test_Table$").WillReturnRows(createTableValueRows)
 
-	result, err := createTable(db, "Test_Table");
+	result, err := createTable(db, "Test_Table")
 	if err != nil {
 		t.Errorf("error was not expected while updating stats: %s", err)
 	}
@@ -226,8 +224,8 @@ func TestCreateTableOk(t *testing.T) {
 	}
 
 	expectedResult := &table{
-		Name:"Test_Table",
-		SQL: "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1",
+		Name:   "Test_Table",
+		SQL:    "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1",
 		Values: "('1','','Test Name 1'),('2','test2@test.de','Test Name 2')",
 	}
 
@@ -249,13 +247,13 @@ func TestDumpOk(t *testing.T) {
 	defer db.Close()
 
 	showTablesRows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
-		AddRow("Test_Table",)
+		AddRow("Test_Table")
 
 	serverVersionRows := sqlmock.NewRows([]string{"Version()"}).
-		AddRow("test_version",)
+		AddRow("test_version")
 
 	createTableRows := sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`email` char(60) DEFAULT NULL, `name` char(60), PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1",)
+		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`email` char(60) DEFAULT NULL, `name` char(60), PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
 
 	createTableValueRows := sqlmock.NewRows([]string{"id", "email", "name"}).
 		AddRow(1, nil, "Test Name 1").
@@ -266,11 +264,10 @@ func TestDumpOk(t *testing.T) {
 	mock.ExpectQuery("^SHOW CREATE TABLE Test_Table$").WillReturnRows(createTableRows)
 	mock.ExpectQuery("^SELECT (.+) FROM Test_Table$").WillReturnRows(createTableValueRows)
 
-
 	dumper := &Dumper{
-		db:db,
+		db:     db,
 		format: "test_format",
-		dir: "/tmp/",
+		dir:    "/tmp/",
 	}
 
 	path, err := dumper.Dump()
@@ -291,8 +288,7 @@ func TestDumpOk(t *testing.T) {
 
 	result := strings.Replace(strings.Split(string(f), "-- Dump completed")[0], "`", "\\", -1)
 
-
-expected := `-- Go SQL Dump 0.1.1
+	expected := `-- Go SQL Dump ` + version + `
 --
 -- ------------------------------------------------------
 -- Server version	test_version
@@ -320,4 +316,3 @@ UNLOCK TABLES;
 		t.Fatalf("expected %#v, got %#v", expected, result)
 	}
 }
-

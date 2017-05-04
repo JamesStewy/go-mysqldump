@@ -23,7 +23,7 @@ type dump struct {
 	CompleteTime  string
 }
 
-const version = "0.1.1"
+const version = "0.2.0"
 
 const tmpl = `-- Go SQL Dump {{ .DumpVersion }}
 --
