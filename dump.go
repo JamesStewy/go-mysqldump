@@ -226,7 +226,7 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 
 		for key, value := range data {
 			if value != nil && value.Valid {
-				dataStrings[key] = value.String
+				dataStrings[key] = escapeString(value.String)
 			}
 		}
 
@@ -234,4 +234,17 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 	}
 
 	return strings.Join(data_text, ","), rows.Err()
+}
+
+func escapeString(str string) string {
+	replace := map[string]string{
+		"'": `\'`,
+		`"`: `\"`,
+	}
+
+	for b, a := range replace {
+		str = strings.Replace(str, b, a, -1)
+	}
+
+	return str
 }

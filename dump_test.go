@@ -196,6 +196,36 @@ func TestCreateTableValuesNil(t *testing.T) {
 	}
 }
 
+func TestCreateTableEscapeStrings(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+
+	rows := sqlmock.NewRows([]string{"id", "text"}).
+		AddRow(1, `Test Single ' Quote`).
+		AddRow(2, `Test Double " Quote`)
+
+	mock.ExpectQuery("^SELECT (.+) FROM test$").WillReturnRows(rows)
+
+	result, err := createTableValues(db, "test")
+	if err != nil {
+		t.Errorf("error was not expected while updating stats: %s", err)
+	}
+
+	// we make sure that all expectations were met
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("there were unfulfilled expections: %s", err)
+	}
+
+	expectedResult := `('1','Test Single \' Quote'),('2','Test Double \" Quote')`
+
+	if !reflect.DeepEqual(result, expectedResult) {
+		t.Fatalf("expected %#v, got %#v", expectedResult, result)
+	}
+
+	defer db.Close()
+}
 func TestCreateTableOk(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
