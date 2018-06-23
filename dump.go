@@ -226,11 +226,13 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 
 		for key, value := range data {
 			if value != nil && value.Valid {
-				dataStrings[key] = escapeString(value.String)
+				dataStrings[key] = "'" + escapeString(value.String) + "'"
+			} else {
+				dataStrings[key] = "null"
 			}
 		}
 
-		data_text = append(data_text, "('"+strings.Join(dataStrings, "','")+"')")
+		data_text = append(data_text, "("+strings.Join(dataStrings, ",")+")")
 	}
 
 	return strings.Join(data_text, ","), rows.Err()
