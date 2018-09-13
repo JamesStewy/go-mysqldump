@@ -205,7 +205,10 @@ func TestCreateTableEscapeStrings(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{"id", "text"}).
 		AddRow(1, `Test Single ' Quote`).
-		AddRow(2, `Test Double " Quote`)
+		AddRow(2, `Test Double " Quote`).
+		AddRow(3, `Test Backslash \ Quote`).
+		AddRow(4, `Test Percentage % Quote`).
+		AddRow(5, `Test Underscore _ Quote`)
 
 	mock.ExpectQuery("^SELECT (.+) FROM test$").WillReturnRows(rows)
 
@@ -219,7 +222,7 @@ func TestCreateTableEscapeStrings(t *testing.T) {
 		t.Errorf("there were unfulfilled expections: %s", err)
 	}
 
-	expectedResult := `('1','Test Single \' Quote'),('2','Test Double \" Quote')`
+	expectedResult := `('1','Test Single \' Quote'),('2','Test Double \" Quote'),('3','Test Backslash \\ Quote'),('4','Test Percentage \% Quote'),('5','Test Underscore \_ Quote')`
 
 	if !reflect.DeepEqual(result, expectedResult) {
 		t.Fatalf("expected %#v, got %#v", expectedResult, result)

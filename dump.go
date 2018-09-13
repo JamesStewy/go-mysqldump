@@ -240,8 +240,11 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 
 func escapeString(str string) string {
 	replace := map[string]string{
+		`\`: `\\`,
 		"'": `\'`,
 		`"`: `\"`,
+		`%`: `\%`,
+		`_`: `\_`,
 	}
 
 	for b, a := range replace {
