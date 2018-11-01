@@ -221,7 +221,7 @@ func TestCreateTableEscapeStrings(t *testing.T) {
 		t.Errorf("there were unfulfilled expections: %s", err)
 	}
 
-	expectedResult := `('1','Test Single \' Quote'),('2','Test Double \" Quote'),('3','Test Backslash \\ Quote'),('4','Test Percentage \% Quote')`
+	expectedResult := `('1','Test Single \' Quote'),('2','Test Double \" Quote'),('3','Test Backslash \\ Quote'),('4','Test Percentage % Quote')`
 
 	if !reflect.DeepEqual(result, expectedResult) {
 		t.Fatalf("expected %#v, got %#v", expectedResult, result)

@@ -250,7 +250,6 @@ func escapeString(str string) string {
 	replace = map[string]string{
 		"'": `\'`,
 		`"`: `\"`,
-		`%`: `\%`,
 	}
 
 	for b, a := range replace {
