@@ -179,18 +179,17 @@ func createTable(db *sql.DB, name string) (*table, error) {
 
 func createTableSQL(db *sql.DB, name string) (string, error) {
 	// Get table creation SQL
-	var table_return sql.NullString
-	var table_sql sql.NullString
-	err := db.QueryRow("SHOW CREATE TABLE "+name).Scan(&table_return, &table_sql)
+	var tableReturn, tableSQL sql.NullString
+	err := db.QueryRow("SHOW CREATE TABLE "+name).Scan(&tableReturn, &tableSQL)
 
 	if err != nil {
 		return "", err
 	}
-	if table_return.String != name {
+	if tableReturn.String != name {
 		return "", errors.New("Returned table is not the same as requested table")
 	}
 
-	return table_sql.String, nil
+	return tableSQL.String, nil
 }
 
 func createTableValues(db *sql.DB, name string) (string, error) {
@@ -211,7 +210,7 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 	}
 
 	// Read data
-	data_text := make([]string, 0)
+	dataText := make([]string, 0)
 	for rows.Next() {
 		// Init temp data storage
 
@@ -220,7 +219,7 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 
 		data := make([]*sql.NullString, len(columns))
 		ptrs := make([]interface{}, len(columns))
-		for i, _ := range data {
+		for i := range data {
 			ptrs[i] = &data[i]
 		}
 
@@ -239,8 +238,8 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 			}
 		}
 
-		data_text = append(data_text, "("+strings.Join(dataStrings, ",")+")")
+		dataText = append(dataText, "("+strings.Join(dataStrings, ",")+")")
 	}
 
-	return strings.Join(data_text, ","), rows.Err()
+	return strings.Join(dataText, ","), rows.Err()
 }
