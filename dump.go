@@ -3,6 +3,7 @@ package mysqldump
 import (
 	"database/sql"
 	"errors"
+	"io"
 	"os"
 	"path"
 	"strings"
@@ -67,7 +68,7 @@ UNLOCK TABLES;
 -- Dump completed on {{ .CompleteTime }}
 `
 
-// Creates a MYSQL Dump based on the options supplied through the dumper.
+// Dump creates a MySQL dump based on the options supplied through the dumper.
 func (d *Dumper) Dump() (string, error) {
 	name := time.Now().Format(d.format)
 	p := path.Join(d.dir, name+".sql")
@@ -86,28 +87,34 @@ func (d *Dumper) Dump() (string, error) {
 
 	defer f.Close()
 
+	return p, Dump(d.db, f)
+}
+
+// Dump Creates a MYSQL dump from the connection to the stream.
+func Dump(db *sql.DB, out io.Writer) error {
+	var err error
 	data := dump{
 		DumpVersion: version,
 		Tables:      make([]*table, 0),
 	}
 
 	// Get server version
-	if data.ServerVersion, err = getServerVersion(d.db); err != nil {
-		return p, err
+	if data.ServerVersion, err = getServerVersion(db); err != nil {
+		return err
 	}
 
 	// Get tables
-	tables, err := getTables(d.db)
+	tables, err := getTables(db)
 	if err != nil {
-		return p, err
+		return err
 	}
 
 	// Get sql for each table
 	for _, name := range tables {
-		if t, err := createTable(d.db, name); err == nil {
+		if t, err := createTable(db, name); err == nil {
 			data.Tables = append(data.Tables, t)
 		} else {
-			return p, err
+			return err
 		}
 	}
 
@@ -117,13 +124,13 @@ func (d *Dumper) Dump() (string, error) {
 	// Write dump to file
 	t, err := template.New("mysqldump").Parse(tmpl)
 	if err != nil {
-		return p, err
+		return err
 	}
-	if err = t.Execute(f, data); err != nil {
-		return p, err
+	if err = t.Execute(out, data); err != nil {
+		return err
 	}
 
-	return p, nil
+	return nil
 }
 
 func getTables(db *sql.DB) ([]string, error) {
@@ -148,11 +155,11 @@ func getTables(db *sql.DB) ([]string, error) {
 }
 
 func getServerVersion(db *sql.DB) (string, error) {
-	var server_version sql.NullString
-	if err := db.QueryRow("SELECT version()").Scan(&server_version); err != nil {
+	var serverVersion sql.NullString
+	if err := db.QueryRow("SELECT version()").Scan(&serverVersion); err != nil {
 		return "", err
 	}
-	return server_version.String, nil
+	return serverVersion.String, nil
 }
 
 func createTable(db *sql.DB, name string) (*table, error) {
