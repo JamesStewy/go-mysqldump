@@ -6,47 +6,48 @@ Create MYSQL dumps in Go without the `mysqldump` CLI as a dependancy.
 package main
 
 import (
-	"database/sql"
-	"fmt"
+  "database/sql"
+  "fmt"
 
-	"github.com/JamesStewy/go-mysqldump"
-	_ "github.com/go-sql-driver/mysql"
+  "github.com/JamesStewy/go-mysqldump"
+  _ "github.com/go-sql-driver/mysql"
 )
 
 func main() {
-	// Open connection to database
-  username := "your-user"
-  password := "your-pw"
-  hostname := "your-hostname"
-  port := "your-port"
-	dbname := "your-db"
+  // Open connection to database
+  config := mysql.NewConfig()
+  config.User = "your-user"
+  config.Passwd = "your-pw"
+  config.DBName = "your-db"
+  config.Net = "tcp"
+  config.Addr = "your-hostname:your-port"
 
   dumpDir := "dumps"  // you should create this directory
   dumpFilenameFormat := fmt.Sprintf("%s-20060102T150405", dbname)   // accepts time layout string and add .sql at the end of file
 
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, hostname, port, dbname))
-	if err != nil {
-		fmt.Println("Error opening database: ", err)
-		return
-	}
+  db, err := sql.Open("mysql", config.FormatDNS())
+  if err != nil {
+    fmt.Println("Error opening database: ", err)
+    return
+  }
 
-	// Register database with mysqldump
-	dumper, err := mysqldump.Register(db, dumpDir, dumpFilenameFormat)
-	if err != nil {
-		fmt.Println("Error registering databse:", err)
-		return
-	}
+  // Register database with mysqldump
+  dumper, err := mysqldump.Register(db, dumpDir, dumpFilenameFormat)
+  if err != nil {
+    fmt.Println("Error registering databse:", err)
+    return
+  }
 
-	// Dump database to file
-	resultFilename, err := dumper.Dump()
-	if err != nil {
-		fmt.Println("Error dumping:", err)
-		return
-	}
-	fmt.Printf("File is saved to %s", resultFilename)
+  // Dump database to file
+  resultFilename, err := dumper.Dump()
+  if err != nil {
+    fmt.Println("Error dumping:", err)
+    return
+  }
+  fmt.Printf("File is saved to %s", resultFilename)
 
-	// Close dumper and connected database
-	dumper.Close()
+  // Close dumper and connected database
+  dumper.Close()
 }
 
 ```
