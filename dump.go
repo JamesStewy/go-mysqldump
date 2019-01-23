@@ -20,13 +20,17 @@ type table struct {
 type dump struct {
 	DumpVersion   string
 	ServerVersion string
-	Tables        []*table
 	CompleteTime  string
+	HeaderTmpl    *template.Template
+	TableTmpl     *template.Template
+	FooterTmpl    *template.Template
+	Connection    *sql.DB
+	Out           io.Writer
 }
 
-const version = "0.2.2"
+const version = "0.3.1"
 
-const tmpl = `-- Go SQL Dump {{ .DumpVersion }}
+const headerTmpl = `-- Go SQL Dump {{ .DumpVersion }}
 --
 -- ------------------------------------------------------
 -- Server version	{{ .ServerVersion }}
@@ -41,9 +45,9 @@ const tmpl = `-- Go SQL Dump {{ .DumpVersion }}
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+`
 
-
-{{range .Tables}}
+const tableTmpl = `
 --
 -- Table structure for table {{ .Name }}
 --
@@ -64,9 +68,71 @@ INSERT INTO {{ .Name }} VALUES {{ .Values }};
 {{ end }}
 /*!40000 ALTER TABLE {{ .Name }} ENABLE KEYS */;
 UNLOCK TABLES;
-{{ end }}
+`
+
+const footerTmpl = `
 -- Dump completed on {{ .CompleteTime }}
 `
+
+func (data *dump) getTemplates() (err error) {
+	// Write dump to file
+	data.HeaderTmpl, err = template.New("mysqldumpHeader").Parse(headerTmpl)
+	if err != nil {
+		return
+	}
+
+	data.TableTmpl, err = template.New("mysqldumpTable").Parse(tableTmpl)
+	if err != nil {
+		return
+	}
+
+	data.FooterTmpl, err = template.New("mysqldumpTable").Parse(footerTmpl)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (data *dump) dump() error {
+	if err := data.HeaderTmpl.Execute(data.Out, data); err != nil {
+		return err
+	}
+
+	// Get tables
+	tables, err := getTables(data.Connection)
+	if err != nil {
+		return err
+	}
+
+	// Get sql for each table
+	for _, name := range tables {
+		if err := data.dumpTable(name); err != nil {
+			return err
+		}
+	}
+
+	// Set complete time
+	data.CompleteTime = time.Now().String()
+
+	if err = data.FooterTmpl.Execute(data.Out, data); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (data *dump) dumpTable(name string) error {
+	table, err := createTable(data.Connection, name)
+	if err != nil {
+		return err
+	}
+
+	if err = data.TableTmpl.Execute(data.Out, table); err != nil {
+		return err
+	}
+
+	return nil
+}
 
 // Dump creates a MySQL dump based on the options supplied through the dumper.
 func (d *Dumper) Dump() (string, error) {
@@ -95,7 +161,8 @@ func Dump(db *sql.DB, out io.Writer) error {
 	var err error
 	data := dump{
 		DumpVersion: version,
-		Tables:      make([]*table, 0),
+		Connection:  db,
+		Out:         out,
 	}
 
 	// Get server version
@@ -103,34 +170,11 @@ func Dump(db *sql.DB, out io.Writer) error {
 		return err
 	}
 
-	// Get tables
-	tables, err := getTables(db)
-	if err != nil {
+	if err := data.getTemplates(); err != nil {
 		return err
 	}
 
-	// Get sql for each table
-	for _, name := range tables {
-		if t, err := createTable(db, name); err == nil {
-			data.Tables = append(data.Tables, t)
-		} else {
-			return err
-		}
-	}
-
-	// Set complete time
-	data.CompleteTime = time.Now().String()
-
-	// Write dump to file
-	t, err := template.New("mysqldump").Parse(tmpl)
-	if err != nil {
-		return err
-	}
-	if err = t.Execute(out, data); err != nil {
-		return err
-	}
-
-	return nil
+	return data.dump()
 }
 
 func getTables(db *sql.DB) ([]string, error) {
