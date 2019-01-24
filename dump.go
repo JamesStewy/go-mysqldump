@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 )
@@ -21,11 +22,14 @@ type dump struct {
 	DumpVersion   string
 	ServerVersion string
 	CompleteTime  string
-	HeaderTmpl    *template.Template
-	TableTmpl     *template.Template
-	FooterTmpl    *template.Template
-	Connection    *sql.DB
 	Out           io.Writer
+	Connection    *sql.DB
+
+	headerTmpl *template.Template
+	tableTmpl  *template.Template
+	footerTmpl *template.Template
+	mux        sync.Mutex
+	wg         sync.WaitGroup
 }
 
 const version = "0.3.1"
@@ -38,7 +42,7 @@ const headerTmpl = `-- Go SQL Dump {{ .DumpVersion }}
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
- SET NAMES utf8mb4;
+ SET NAMES utf8mb4 ;
 /*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
 /*!40103 SET TIME_ZONE='+00:00' */;
 /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
@@ -52,9 +56,9 @@ const tableTmpl = `
 -- Table structure for table {{ .Name }}
 --
 
-DROP TABLE IF EXISTS ` + "`{{ .Name }}`" + `;
+DROP TABLE IF EXISTS {{ .Name }};
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
- SET character_set_client = utf8mb4;
+ SET character_set_client = utf8mb4 ;
 {{ .SQL }};
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -72,22 +76,32 @@ UNLOCK TABLES;
 `
 
 const footerTmpl = `
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
 -- Dump completed on {{ .CompleteTime }}
 `
 
 func (data *dump) getTemplates() (err error) {
 	// Write dump to file
-	data.HeaderTmpl, err = template.New("mysqldumpHeader").Parse(headerTmpl)
+	data.headerTmpl, err = template.New("mysqldumpHeader").Parse(headerTmpl)
 	if err != nil {
 		return
 	}
 
-	data.TableTmpl, err = template.New("mysqldumpTable").Parse(tableTmpl)
+	data.tableTmpl, err = template.New("mysqldumpTable").Parse(tableTmpl)
 	if err != nil {
 		return
 	}
 
-	data.FooterTmpl, err = template.New("mysqldumpTable").Parse(footerTmpl)
+	data.footerTmpl, err = template.New("mysqldumpTable").Parse(footerTmpl)
 	if err != nil {
 		return
 	}
@@ -95,7 +109,7 @@ func (data *dump) getTemplates() (err error) {
 }
 
 func (data *dump) dump() error {
-	if err := data.HeaderTmpl.Execute(data.Out, data); err != nil {
+	if err := data.headerTmpl.Execute(data.Out, data); err != nil {
 		return err
 	}
 
@@ -106,20 +120,17 @@ func (data *dump) dump() error {
 	}
 
 	// Get sql for each table
+	data.wg.Add(len(tables))
 	for _, name := range tables {
 		if err := data.dumpTable(name); err != nil {
 			return err
 		}
 	}
+	data.wg.Wait()
 
 	// Set complete time
 	data.CompleteTime = time.Now().String()
-
-	if err = data.FooterTmpl.Execute(data.Out, data); err != nil {
-		return err
-	}
-
-	return nil
+	return data.footerTmpl.Execute(data.Out, data)
 }
 
 func (data *dump) dumpTable(name string) error {
@@ -128,11 +139,16 @@ func (data *dump) dumpTable(name string) error {
 		return err
 	}
 
-	if err = data.TableTmpl.Execute(data.Out, table); err != nil {
-		return err
-	}
-
+	go data.writeTable(table)
 	return nil
+}
+
+func (data *dump) writeTable(table *table) error {
+	data.mux.Lock()
+	err := data.tableTmpl.Execute(data.Out, table)
+	data.mux.Unlock()
+	data.wg.Done()
+	return err
 }
 
 // Dump creates a MySQL dump based on the options supplied through the dumper.
@@ -209,7 +225,7 @@ func getServerVersion(db *sql.DB) (string, error) {
 
 func createTable(db *sql.DB, name string) (*table, error) {
 	var err error
-	t := &table{Name: name}
+	t := &table{Name: "`" + name + "`"}
 
 	if t.SQL, err = createTableSQL(db, name); err != nil {
 		return nil, err
