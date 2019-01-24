@@ -3,9 +3,11 @@ package mysqldump
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
+	"reflect"
 	"strings"
 	"sync"
 	"text/template"
@@ -272,30 +274,55 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 
 	// Read data
 	dataText := make([]string, 0)
-	for rows.Next() {
-		// Init temp data storage
+	tt, err := rows.ColumnTypes()
+	if err != nil {
+		return "", err
+	}
 
-		//ptrs := make([]interface{}, len(columns))
-		//var ptrs []interface {} = make([]*sql.NullString, len(columns))
-
-		data := make([]*sql.NullString, len(columns))
-		ptrs := make([]interface{}, len(columns))
-		for i := range data {
-			ptrs[i] = &data[i]
+	types := make([]reflect.Type, len(tt))
+	for i, tp := range tt {
+		st := tp.ScanType()
+		if st == nil || st.Kind() == reflect.Slice {
+			types[i] = reflect.TypeOf(sql.NullString{})
+		} else if st.Kind() == reflect.Int ||
+			st.Kind() == reflect.Int8 ||
+			st.Kind() == reflect.Int16 ||
+			st.Kind() == reflect.Int32 ||
+			st.Kind() == reflect.Int64 {
+			types[i] = reflect.TypeOf(sql.NullInt64{})
+		} else {
+			types[i] = st
 		}
-
+	}
+	values := make([]interface{}, len(tt))
+	for i := range values {
+		values[i] = reflect.New(types[i]).Interface()
+	}
+	for rows.Next() {
 		// Read data
-		if err := rows.Scan(ptrs...); err != nil {
+		if err := rows.Scan(values...); err != nil {
 			return "", err
 		}
 
 		dataStrings := make([]string, len(columns))
 
-		for key, value := range data {
-			if value != nil && value.Valid {
-				dataStrings[key] = "'" + value.String + "'"
-			} else {
+		for key, value := range values {
+			if value == nil {
 				dataStrings[key] = "null"
+			} else if s, ok := value.(*sql.NullString); ok {
+				if s.Valid {
+					dataStrings[key] = "'" + strings.Replace(s.String, "\n", "\\n", -1) + "'"
+				} else {
+					dataStrings[key] = "NULL"
+				}
+			} else if s, ok := value.(*sql.NullInt64); ok {
+				if s.Valid {
+					dataStrings[key] = fmt.Sprintf("%d", s.Int64)
+				} else {
+					dataStrings[key] = "NULL"
+				}
+			} else {
+				panic(value)
 			}
 		}
 
