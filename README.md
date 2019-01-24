@@ -10,7 +10,7 @@ import (
   "fmt"
 
   "github.com/JamesStewy/go-mysqldump"
-  _ "github.com/go-sql-driver/mysql"
+  "github.com/go-sql-driver/mysql"
 )
 
 func main() {
