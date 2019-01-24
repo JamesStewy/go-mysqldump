@@ -34,7 +34,7 @@ type dump struct {
 	wg         sync.WaitGroup
 }
 
-const version = "0.3.1"
+const version = "0.3.2"
 
 const headerTmpl = `-- Go SQL Dump {{ .DumpVersion }}
 --

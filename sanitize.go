@@ -16,7 +16,7 @@ func mysqlReplacer() *strings.Replacer {
 			// "\t", "\\t",
 			"\x1A", "\\Z", // ASCII 26 == x1A
 			"\\", "\\\\",
-			"%", "\\%",
+			// "%", "\\%",
 			// "_", "\\_",
 		)
 	}
