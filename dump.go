@@ -322,7 +322,7 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 					dataStrings[key] = "NULL"
 				}
 			} else {
-				panic(value)
+				dataStrings[key] = fmt.Sprint("'", value, "'")
 			}
 		}
 
