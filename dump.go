@@ -77,8 +77,7 @@ INSERT INTO {{ .Name }} VALUES {{ .Values }};
 UNLOCK TABLES;
 `
 
-const footerTmpl = `
-/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+const footerTmpl = `/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
@@ -282,7 +281,9 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 	types := make([]reflect.Type, len(tt))
 	for i, tp := range tt {
 		st := tp.ScanType()
-		if st == nil || st.Kind() == reflect.Slice {
+		if tp.DatabaseTypeName() == "BLOB" {
+			types[i] = reflect.TypeOf(sql.RawBytes{})
+		} else if st == nil || st.Kind() == reflect.Slice {
 			types[i] = reflect.TypeOf(sql.NullString{})
 		} else if st.Kind() == reflect.Int ||
 			st.Kind() == reflect.Int8 ||
@@ -311,7 +312,7 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 				dataStrings[key] = "null"
 			} else if s, ok := value.(*sql.NullString); ok {
 				if s.Valid {
-					dataStrings[key] = "'" + strings.Replace(s.String, "\n", "\\n", -1) + "'"
+					dataStrings[key] = "'" + sanitize(s.String) + "'"
 				} else {
 					dataStrings[key] = "NULL"
 				}
@@ -320,6 +321,12 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 					dataStrings[key] = fmt.Sprintf("%d", s.Int64)
 				} else {
 					dataStrings[key] = "NULL"
+				}
+			} else if s, ok := value.(*sql.RawBytes); ok {
+				if len(*s) == 0 {
+					dataStrings[key] = "NULL"
+				} else {
+					dataStrings[key] = "_binary '" + sanitize(string(*s)) + "'"
 				}
 			} else {
 				dataStrings[key] = fmt.Sprint("'", value, "'")
