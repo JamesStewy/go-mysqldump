@@ -12,13 +12,14 @@ import (
 	"time"
 )
 
-type table struct {
-	Name   string
-	SQL    string
-	Values string
-}
+/*Data struct to configure dump behavior
 
-// Data struct to configure dump behavior
+ * Out:          Stream to wite to
+
+ * Connection:   Database connection to dump
+
+ * IgnoreTables: Mark sensitive tables to ignore
+ */
 type Data struct {
 	Out          io.Writer
 	Connection   *sql.DB
@@ -29,6 +30,12 @@ type Data struct {
 	footerTmpl *template.Template
 	mux        sync.Mutex
 	wg         sync.WaitGroup
+}
+
+type table struct {
+	Name   string
+	SQL    string
+	Values string
 }
 
 type metaData struct {

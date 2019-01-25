@@ -46,11 +46,10 @@ func main() {
   }
   fmt.Printf("File is saved to %s", resultFilename)
 
-  // Close dumper and connected database
+  // Close dumper, connected database and file stream.
   dumper.Close()
 }
-
 ```
 
-[![GoDoc](https://godoc.org/github.com/JamesStewy/go-mysqldump?status.svg)](https://godoc.org/github.com/JamesStewy/go-mysqldump)
-[![Build Status](https://travis-ci.org/JamesStewy/go-mysqldump.svg?branch=master)](https://travis-ci.org/JamesStewy/go-mysqldump)
+[![GoDoc](https://godoc.org/github.com/jamf/go-mysqldump?status.svg)](https://godoc.org/github.com/jamf/go-mysqldump)
+[![Build Status](https://travis-ci.org/jamf/go-mysqldump.svg?branch=master)](https://travis-ci.org/jamf/go-mysqldump)
