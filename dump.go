@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path"
 	"reflect"
 	"strings"
 	"sync"
@@ -20,18 +18,23 @@ type table struct {
 	Values string
 }
 
-type dump struct {
-	DumpVersion   string
-	ServerVersion string
-	CompleteTime  string
-	Out           io.Writer
-	Connection    *sql.DB
+// Data struct to configure dump behavior
+type Data struct {
+	Out          io.Writer
+	Connection   *sql.DB
+	IgnoreTables []string
 
 	headerTmpl *template.Template
 	tableTmpl  *template.Template
 	footerTmpl *template.Template
 	mux        sync.Mutex
 	wg         sync.WaitGroup
+}
+
+type metaData struct {
+	DumpVersion   string
+	ServerVersion string
+	CompleteTime  string
 }
 
 const version = "0.3.2"
@@ -90,7 +93,70 @@ const footerTmpl = `/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 -- Dump completed on {{ .CompleteTime }}
 `
 
-func (data *dump) getTemplates() (err error) {
+// Dump data using struct
+func (data *Data) Dump() error {
+	meta := metaData{
+		DumpVersion: version,
+	}
+
+	// Get server version
+	if err := meta.updateServerVersion(data.Connection); err != nil {
+		return err
+	}
+
+	if err := data.getTemplates(); err != nil {
+		return err
+	}
+
+	if err := data.headerTmpl.Execute(data.Out, meta); err != nil {
+		return err
+	}
+
+	// Get tables
+	tables, err := data.getTables()
+	if err != nil {
+		return err
+	}
+
+	// Get sql for each table
+	data.wg.Add(len(tables))
+	for _, name := range tables {
+		if err := data.dumpTable(name); err != nil {
+			return err
+		}
+	}
+	data.wg.Wait()
+
+	// Set complete time
+	meta.CompleteTime = time.Now().String()
+	return data.footerTmpl.Execute(data.Out, meta)
+}
+
+// MARK: - Private methods
+
+// MARK: writter methods
+
+func (data *Data) dumpTable(name string) error {
+	table, err := data.createTable(name)
+	if err != nil {
+		return err
+	}
+
+	go data.writeTable(table)
+	return nil
+}
+
+func (data *Data) writeTable(table *table) error {
+	data.mux.Lock()
+	err := data.tableTmpl.Execute(data.Out, table)
+	data.mux.Unlock()
+	data.wg.Done()
+	return err
+}
+
+// MARK: get methods
+
+func (data *Data) getTemplates() (err error) {
 	// Write dump to file
 	data.headerTmpl, err = template.New("mysqldumpHeader").Parse(headerTmpl)
 	if err != nil {
@@ -109,97 +175,11 @@ func (data *dump) getTemplates() (err error) {
 	return
 }
 
-func (data *dump) dump() error {
-	if err := data.headerTmpl.Execute(data.Out, data); err != nil {
-		return err
-	}
-
-	// Get tables
-	tables, err := getTables(data.Connection)
-	if err != nil {
-		return err
-	}
-
-	// Get sql for each table
-	data.wg.Add(len(tables))
-	for _, name := range tables {
-		if err := data.dumpTable(name); err != nil {
-			return err
-		}
-	}
-	data.wg.Wait()
-
-	// Set complete time
-	data.CompleteTime = time.Now().String()
-	return data.footerTmpl.Execute(data.Out, data)
-}
-
-func (data *dump) dumpTable(name string) error {
-	table, err := createTable(data.Connection, name)
-	if err != nil {
-		return err
-	}
-
-	go data.writeTable(table)
-	return nil
-}
-
-func (data *dump) writeTable(table *table) error {
-	data.mux.Lock()
-	err := data.tableTmpl.Execute(data.Out, table)
-	data.mux.Unlock()
-	data.wg.Done()
-	return err
-}
-
-// Dump creates a MySQL dump based on the options supplied through the dumper.
-func (d *Dumper) Dump() (string, error) {
-	name := time.Now().Format(d.format)
-	p := path.Join(d.dir, name+".sql")
-
-	// Check dump directory
-	if e, _ := exists(p); e {
-		return p, errors.New("Dump '" + name + "' already exists.")
-	}
-
-	// Create .sql file
-	f, err := os.Create(p)
-
-	if err != nil {
-		return p, err
-	}
-
-	defer f.Close()
-
-	return p, Dump(d.db, f)
-}
-
-// Dump Creates a MYSQL dump from the connection to the stream.
-func Dump(db *sql.DB, out io.Writer) error {
-	var err error
-	data := dump{
-		DumpVersion: version,
-		Connection:  db,
-		Out:         out,
-	}
-
-	// Get server version
-	if data.ServerVersion, err = getServerVersion(db); err != nil {
-		return err
-	}
-
-	if err := data.getTemplates(); err != nil {
-		return err
-	}
-
-	return data.dump()
-}
-
-func getTables(db *sql.DB) ([]string, error) {
+func (data *Data) getTables() ([]string, error) {
 	tables := make([]string, 0)
 
 	// Get table list
-	rows, err := db.Query("SHOW TABLES")
+	rows, err := data.Connection.Query("SHOW TABLES")
 	if err != nil {
 		return tables, err
 	}
@@ -211,38 +191,50 @@ func getTables(db *sql.DB) ([]string, error) {
 		if err := rows.Scan(&table); err != nil {
 			return tables, err
 		}
-		tables = append(tables, table.String)
+		if table.Valid && !data.isIgnoredTable(table.String) {
+			tables = append(tables, table.String)
+		}
 	}
 	return tables, rows.Err()
 }
 
-func getServerVersion(db *sql.DB) (string, error) {
-	var serverVersion sql.NullString
-	if err := db.QueryRow("SELECT version()").Scan(&serverVersion); err != nil {
-		return "", err
+func (data *Data) isIgnoredTable(name string) bool {
+	for _, item := range data.IgnoreTables {
+		if item == name {
+			return true
+		}
 	}
-	return serverVersion.String, nil
+	return false
 }
 
-func createTable(db *sql.DB, name string) (*table, error) {
+func (data *metaData) updateServerVersion(db *sql.DB) (err error) {
+	var serverVersion sql.NullString
+	err = db.QueryRow("SELECT version()").Scan(&serverVersion)
+	data.ServerVersion = serverVersion.String
+	return
+}
+
+// MARK: create methods
+
+func (data *Data) createTable(name string) (*table, error) {
 	var err error
 	t := &table{Name: "`" + name + "`"}
 
-	if t.SQL, err = createTableSQL(db, name); err != nil {
+	if t.SQL, err = data.createTableSQL(name); err != nil {
 		return nil, err
 	}
 
-	if t.Values, err = createTableValues(db, name); err != nil {
+	if t.Values, err = data.createTableValues(name); err != nil {
 		return nil, err
 	}
 
 	return t, nil
 }
 
-func createTableSQL(db *sql.DB, name string) (string, error) {
+func (data *Data) createTableSQL(name string) (string, error) {
 	// Get table creation SQL
 	var tableReturn, tableSQL sql.NullString
-	err := db.QueryRow("SHOW CREATE TABLE "+name).Scan(&tableReturn, &tableSQL)
+	err := data.Connection.QueryRow("SHOW CREATE TABLE "+name).Scan(&tableReturn, &tableSQL)
 
 	if err != nil {
 		return "", err
@@ -254,9 +246,9 @@ func createTableSQL(db *sql.DB, name string) (string, error) {
 	return tableSQL.String, nil
 }
 
-func createTableValues(db *sql.DB, name string) (string, error) {
+func (data *Data) createTableValues(name string) (string, error) {
 	// Get Data
-	rows, err := db.Query("SELECT * FROM " + name)
+	rows, err := data.Connection.Query("SELECT * FROM " + name)
 	if err != nil {
 		return "", err
 	}
