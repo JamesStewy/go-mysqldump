@@ -275,16 +275,14 @@ func (data *Data) createTableValues(name string) (string, error) {
 		st := tp.ScanType()
 		if tp.DatabaseTypeName() == "BLOB" {
 			types[i] = reflect.TypeOf(sql.RawBytes{})
-		} else if st == nil || st.Kind() == reflect.Slice {
-			types[i] = reflect.TypeOf(sql.NullString{})
-		} else if st.Kind() == reflect.Int ||
+		} else if st != nil && (st.Kind() == reflect.Int ||
 			st.Kind() == reflect.Int8 ||
 			st.Kind() == reflect.Int16 ||
 			st.Kind() == reflect.Int32 ||
-			st.Kind() == reflect.Int64 {
+			st.Kind() == reflect.Int64) {
 			types[i] = reflect.TypeOf(sql.NullInt64{})
 		} else {
-			types[i] = st
+			types[i] = reflect.TypeOf(sql.NullString{})
 		}
 	}
 	values := make([]interface{}, len(tt))

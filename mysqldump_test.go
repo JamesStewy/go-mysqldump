@@ -80,7 +80,7 @@ CREATE TABLE 'Test_Table' (\id\ int(11) NOT NULL AUTO_INCREMENT,\email\ char(60)
 
 LOCK TABLES \Test_Table\ WRITE;
 /*!40000 ALTER TABLE \Test_Table\ DISABLE KEYS */;
-INSERT INTO \Test_Table\ VALUES (1,null,'Test Name 1'),(2,'test2@test.de','Test Name 2');
+INSERT INTO \Test_Table\ VALUES ('1',NULL,'Test Name 1'),('2','test2@test.de','Test Name 2');
 /*!40000 ALTER TABLE \Test_Table\ ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

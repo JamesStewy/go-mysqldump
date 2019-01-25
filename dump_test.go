@@ -244,7 +244,7 @@ func TestCreateTableValuesNil(t *testing.T) {
 		t.Errorf("there were unfulfilled expections: %s", err)
 	}
 
-	expectedResult := "('1',null,'Test Name 1'),('2','test2@test.de','Test Name 2'),('3','','Test Name 3')"
+	expectedResult := "('1',NULL,'Test Name 1'),('2','test2@test.de','Test Name 2'),('3','','Test Name 3')"
 
 	if !reflect.DeepEqual(result, expectedResult) {
 		t.Fatalf("expected %#v, got %#v", expectedResult, result)
@@ -284,9 +284,9 @@ func TestCreateTableOk(t *testing.T) {
 	}
 
 	expectedResult := &table{
-		Name:   "Test_Table",
+		Name:   "`Test_Table`",
 		SQL:    "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1",
-		Values: "('1',null,'Test Name 1'),('2','test2@test.de','Test Name 2')",
+		Values: "('1',NULL,'Test Name 1'),('2','test2@test.de','Test Name 2')",
 	}
 
 	if !reflect.DeepEqual(result, expectedResult) {
