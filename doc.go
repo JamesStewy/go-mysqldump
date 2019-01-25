@@ -3,7 +3,7 @@ Create MYSQL dumps in Go without the 'mysqldump' CLI as a dependancy.
 
 Example
 
-This example uses the mymysql driver (example 7 https://github.com/ziutek/mymysql) to connect to a mysql instance.
+This example uses the mysql driver (https://github.com/go-sql-driver/mysql) to connect to a mysql instance.
 
     package main
 
@@ -11,7 +11,7 @@ This example uses the mymysql driver (example 7 https://github.com/ziutek/mymysq
         "database/sql"
         "fmt"
 
-        "github.com/JamesStewy/go-mysqldump"
+        "github.com/jamf/go-mysqldump"
         "github.com/go-sql-driver/mysql"
     )
 

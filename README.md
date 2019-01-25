@@ -9,7 +9,7 @@ import (
   "database/sql"
   "fmt"
 
-  "github.com/JamesStewy/go-mysqldump"
+  "github.com/jamf/go-mysqldump"
   "github.com/go-sql-driver/mysql"
 )
 
