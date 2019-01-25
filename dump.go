@@ -305,7 +305,7 @@ func (data *Data) createTableValues(name string) (string, error) {
 
 		for key, value := range values {
 			if value == nil {
-				dataStrings[key] = "null"
+				dataStrings[key] = "NULL"
 			} else if s, ok := value.(*sql.NullString); ok {
 				if s.Valid {
 					dataStrings[key] = "'" + sanitize(s.String) + "'"
