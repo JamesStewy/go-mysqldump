@@ -106,7 +106,6 @@ func (data *Data) Dump() error {
 		DumpVersion: version,
 	}
 
-	// Get server version
 	if err := meta.updateServerVersion(data.Connection); err != nil {
 		return err
 	}
@@ -119,13 +118,11 @@ func (data *Data) Dump() error {
 		return err
 	}
 
-	// Get tables
 	tables, err := data.getTables()
 	if err != nil {
 		return err
 	}
 
-	// Get sql for each table
 	data.wg.Add(len(tables))
 	for _, name := range tables {
 		if err := data.dumpTable(name); err != nil {
@@ -137,7 +134,6 @@ func (data *Data) Dump() error {
 		return data.err
 	}
 
-	// Set complete time
 	meta.CompleteTime = time.Now().String()
 	return data.footerTmpl.Execute(data.Out, meta)
 }
@@ -168,8 +164,8 @@ func (data *Data) writeTable(table *table) {
 
 // MARK: get methods
 
+// getTemplates initilaizes the templates on data from the constants in this file
 func (data *Data) getTemplates() (err error) {
-	// Write dump to file
 	data.headerTmpl, err = template.New("mysqldumpHeader").Parse(headerTmpl)
 	if err != nil {
 		return
@@ -190,14 +186,12 @@ func (data *Data) getTemplates() (err error) {
 func (data *Data) getTables() ([]string, error) {
 	tables := make([]string, 0)
 
-	// Get table list
 	rows, err := data.Connection.Query("SHOW TABLES")
 	if err != nil {
 		return tables, err
 	}
 	defer rows.Close()
 
-	// Read result
 	for rows.Next() {
 		var table sql.NullString
 		if err := rows.Scan(&table); err != nil {
@@ -244,7 +238,6 @@ func (data *Data) createTable(name string) (*table, error) {
 }
 
 func (data *Data) createTableSQL(name string) (string, error) {
-	// Get table creation SQL
 	var tableReturn, tableSQL sql.NullString
 	err := data.Connection.QueryRow("SHOW CREATE TABLE "+name).Scan(&tableReturn, &tableSQL)
 
@@ -259,14 +252,12 @@ func (data *Data) createTableSQL(name string) (string, error) {
 }
 
 func (data *Data) createTableValues(name string) (string, error) {
-	// Get Data
 	rows, err := data.Connection.Query("SELECT * FROM " + name)
 	if err != nil {
 		return "", err
 	}
 	defer rows.Close()
 
-	// Get columns
 	columns, err := rows.Columns()
 	if err != nil {
 		return "", err
@@ -275,7 +266,6 @@ func (data *Data) createTableValues(name string) (string, error) {
 		return "", errors.New("No columns in table " + name + ".")
 	}
 
-	// Read data
 	dataText := make([]string, 0)
 	tt, err := rows.ColumnTypes()
 	if err != nil {
@@ -302,7 +292,6 @@ func (data *Data) createTableValues(name string) (string, error) {
 		values[i] = reflect.New(types[i]).Interface()
 	}
 	for rows.Next() {
-		// Read data
 		if err := rows.Scan(values...); err != nil {
 			return "", err
 		}
@@ -311,7 +300,7 @@ func (data *Data) createTableValues(name string) (string, error) {
 
 		for key, value := range values {
 			if value == nil {
-				dataStrings[key] = "null"
+				dataStrings[key] = "NULL"
 			} else if s, ok := value.(*sql.NullString); ok {
 				if s.Valid {
 					dataStrings[key] = "'" + sanitize(s.String) + "'"
