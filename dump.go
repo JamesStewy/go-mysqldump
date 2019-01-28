@@ -29,6 +29,7 @@ type Data struct {
 	footerTmpl *template.Template
 	mux        sync.Mutex
 	wg         sync.WaitGroup
+	err        error
 }
 
 type table struct {
@@ -132,6 +133,9 @@ func (data *Data) Dump() error {
 		}
 	}
 	data.wg.Wait()
+	if data.err != nil {
+		return data.err
+	}
 
 	// Set complete time
 	meta.CompleteTime = time.Now().String()
@@ -152,12 +156,14 @@ func (data *Data) dumpTable(name string) error {
 	return nil
 }
 
-func (data *Data) writeTable(table *table) error {
+func (data *Data) writeTable(table *table) {
 	data.mux.Lock()
-	err := data.tableTmpl.Execute(data.Out, table)
+	if err := data.tableTmpl.Execute(data.Out, table); err != nil && data.err == nil {
+		data.err = err
+	}
 	data.mux.Unlock()
 	data.wg.Done()
-	return err
+	return
 }
 
 // MARK: get methods
