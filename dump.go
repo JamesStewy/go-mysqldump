@@ -44,7 +44,7 @@ type metaData struct {
 	CompleteTime  string
 }
 
-const version = "0.3.3"
+const version = "0.3.4"
 
 const headerTmpl = `-- Go SQL Dump {{ .DumpVersion }}
 --
