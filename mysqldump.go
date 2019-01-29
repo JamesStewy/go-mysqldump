@@ -53,7 +53,7 @@ func Dump(db *sql.DB, out io.Writer) error {
 }
 
 // Close the dumper.
-// Will also close the database the dumper is connected to as well as the out stream if it is a *os.File.
+// Will also close the database the dumper is connected to as well as the out stream if it has a Close method.
 //
 // Not required.
 func (d *Data) Close() error {
@@ -61,8 +61,8 @@ func (d *Data) Close() error {
 		d.Connection = nil
 		d.Out = nil
 	}()
-	if file, ok := d.Out.(*os.File); ok {
-		file.Close()
+	if out, ok := d.Out.(io.Closer); ok {
+		out.Close()
 	}
 	return d.Connection.Close()
 }
