@@ -143,6 +143,9 @@ func (data *Data) Dump() error {
 // MARK: writter methods
 
 func (data *Data) dumpTable(name string) error {
+	if data.err != nil {
+		return data.err
+	}
 	table, err := data.createTable(name)
 	if err != nil {
 		return err
@@ -154,7 +157,7 @@ func (data *Data) dumpTable(name string) error {
 
 func (data *Data) writeTable(table *table) {
 	data.mux.Lock()
-	if err := data.tableTmpl.Execute(data.Out, table); err != nil && data.err == nil {
+	if err := data.tableTmpl.Execute(data.Out, table); err != nil {
 		data.err = err
 	}
 	data.mux.Unlock()
