@@ -156,12 +156,18 @@ func (data *Data) dumpTable(name string) error {
 }
 
 func (data *Data) writeTable(table *table) {
+	// Keep a counter of how many tables have been written
+	defer data.wg.Done()
+
+	// Force this method into serial
 	data.mux.Lock()
-	if err := data.tableTmpl.Execute(data.Out, table); err != nil {
+	defer data.mux.Unlock()
+
+	if data.err != nil {
+		return
+	} else if err := data.tableTmpl.Execute(data.Out, table); err != nil {
 		data.err = err
 	}
-	data.mux.Unlock()
-	data.wg.Done()
 	return
 }
 
