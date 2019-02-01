@@ -156,7 +156,7 @@ func TestCreateTableSQLOk(t *testing.T) {
 	rows := sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
 
-	mock.ExpectQuery("^SHOW CREATE TABLE Test_Table$").WillReturnRows(rows)
+	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(rows)
 
 	data := Data{
 		Connection: db,
@@ -192,7 +192,7 @@ func TestCreateTableValuesOk(t *testing.T) {
 		AddRow(1, "test@test.de", "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2")
 
-	mock.ExpectQuery("^SELECT (.+) FROM test$").WillReturnRows(rows)
+	mock.ExpectQuery("^SELECT (.+) FROM `test`$").WillReturnRows(rows)
 
 	data := Data{
 		Connection: db,
@@ -228,7 +228,7 @@ func TestCreateTableValuesNil(t *testing.T) {
 		AddRow(2, "test2@test.de", "Test Name 2").
 		AddRow(3, "", "Test Name 3")
 
-	mock.ExpectQuery("^SELECT (.+) FROM test$").WillReturnRows(rows)
+	mock.ExpectQuery("^SELECT (.+) FROM `test`$").WillReturnRows(rows)
 
 	data := Data{
 		Connection: db,
@@ -266,8 +266,8 @@ func TestCreateTableOk(t *testing.T) {
 		AddRow(1, nil, "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2")
 
-	mock.ExpectQuery("^SHOW CREATE TABLE Test_Table$").WillReturnRows(createTableRows)
-	mock.ExpectQuery("^SELECT (.+) FROM Test_Table$").WillReturnRows(createTableValueRows)
+	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(createTableRows)
+	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
 
 	data := Data{
 		Connection: db,

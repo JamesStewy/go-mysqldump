@@ -233,13 +233,13 @@ func (data *metaData) updateServerVersion(db *sql.DB) (err error) {
 
 func (data *Data) createTable(name string) (*table, error) {
 	var err error
-	t := &table{Name: fmt.Sprintf("`%s`", name)}
+	t := &table{Name: "`" + name + "`"}
 
-	if t.SQL, err = data.createTableSQL(t.Name); err != nil {
+	if t.SQL, err = data.createTableSQL(name); err != nil {
 		return nil, err
 	}
 
-	if t.Values, err = data.createTableValues(t.Name); err != nil {
+	if t.Values, err = data.createTableValues(name); err != nil {
 		return nil, err
 	}
 
@@ -248,7 +248,7 @@ func (data *Data) createTable(name string) (*table, error) {
 
 func (data *Data) createTableSQL(name string) (string, error) {
 	var tableReturn, tableSQL sql.NullString
-	err := data.Connection.QueryRow("SHOW CREATE TABLE "+name).Scan(&tableReturn, &tableSQL)
+	err := data.Connection.QueryRow("SHOW CREATE TABLE `"+name+"`").Scan(&tableReturn, &tableSQL)
 
 	if err != nil {
 		return "", err
@@ -261,7 +261,7 @@ func (data *Data) createTableSQL(name string) (string, error) {
 }
 
 func (data *Data) createTableValues(name string) (string, error) {
-	rows, err := data.Connection.Query("SELECT * FROM " + name)
+	rows, err := data.Connection.Query("SELECT * FROM `" + name + "`")
 	if err != nil {
 		return "", err
 	}
