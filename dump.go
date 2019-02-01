@@ -233,13 +233,13 @@ func (data *metaData) updateServerVersion(db *sql.DB) (err error) {
 
 func (data *Data) createTable(name string) (*table, error) {
 	var err error
-	t := &table{Name: "`" + name + "`"}
+	t := &table{Name: fmt.Sprintf("`%s`", name)}
 
-	if t.SQL, err = data.createTableSQL(name); err != nil {
+	if t.SQL, err = data.createTableSQL(t.Name); err != nil {
 		return nil, err
 	}
 
-	if t.Values, err = data.createTableValues(name); err != nil {
+	if t.Values, err = data.createTableValues(t.Name); err != nil {
 		return nil, err
 	}
 
