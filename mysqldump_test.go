@@ -37,8 +37,8 @@ func TestDumpOk(t *testing.T) {
 
 	mock.ExpectQuery("^SELECT version()").WillReturnRows(serverVersionRows)
 	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(showTablesRows)
-	mock.ExpectQuery("^SHOW CREATE TABLE Test_Table$").WillReturnRows(createTableRows)
-	mock.ExpectQuery("^SELECT (.+) FROM Test_Table$").WillReturnRows(createTableValueRows)
+	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(createTableRows)
+	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
 
 	buf := new(bytes.Buffer)
 	err = Dump(db, buf)
