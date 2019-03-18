@@ -96,6 +96,6 @@ UNLOCK TABLES;
 `
 
 	if !reflect.DeepEqual(result, expected) {
-		t.Fatalf("expected %#v, got %#v", expected, result)
+		t.Fatalf("expected \n%#v, got \n%#v", expected, result)
 	}
 }

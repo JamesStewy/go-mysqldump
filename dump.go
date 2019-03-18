@@ -35,7 +35,7 @@ type Data struct {
 type table struct {
 	Name   string
 	SQL    string
-	Values string
+	Values []string
 }
 
 type metaData struct {
@@ -81,7 +81,10 @@ DROP TABLE IF EXISTS {{ .Name }};
 LOCK TABLES {{ .Name }} WRITE;
 /*!40000 ALTER TABLE {{ .Name }} DISABLE KEYS */;
 {{- if .Values }}
-INSERT INTO {{ .Name }} VALUES {{ .Values }};
+INSERT INTO {{ .Name }} VALUES
+{{- range $index, $element := .Values -}}
+{{- if $index }},{{ else }} {{ end -}}{{ $element }}
+{{- end -}};
 {{- end }}
 /*!40000 ALTER TABLE {{ .Name }} ENABLE KEYS */;
 UNLOCK TABLES;
@@ -262,25 +265,25 @@ func (data *Data) createTableSQL(name string) (string, error) {
 	return tableSQL.String, nil
 }
 
-func (data *Data) createTableValues(name string) (string, error) {
+func (data *Data) createTableValues(name string) ([]string, error) {
 	rows, err := data.Connection.Query("SELECT * FROM `" + name + "`")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if len(columns) == 0 {
-		return "", errors.New("No columns in table " + name + ".")
+		return nil, errors.New("No columns in table " + name + ".")
 	}
 
 	dataText := make([]string, 0)
 	tt, err := rows.ColumnTypes()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	types := make([]reflect.Type, len(tt))
@@ -304,7 +307,7 @@ func (data *Data) createTableValues(name string) (string, error) {
 	}
 	for rows.Next() {
 		if err := rows.Scan(values...); err != nil {
-			return "", err
+			return dataText, err
 		}
 
 		dataStrings := make([]string, len(columns))
@@ -341,5 +344,5 @@ func (data *Data) createTableValues(name string) (string, error) {
 		dataText = append(dataText, "("+strings.Join(dataStrings, ",")+")")
 	}
 
-	return strings.Join(dataText, ","), rows.Err()
+	return dataText, rows.Err()
 }
