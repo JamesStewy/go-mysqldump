@@ -100,6 +100,8 @@ const footerTmpl = `/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 -- Dump completed on {{ .CompleteTime }}
 `
 
+const nullType = "NULL"
+
 // Dump data using struct
 func (data *Data) Dump() error {
 	meta := metaData{
@@ -309,27 +311,30 @@ func (data *Data) createTableValues(name string) (string, error) {
 
 		for key, value := range values {
 			if value == nil {
-				dataStrings[key] = "NULL"
-			} else if s, ok := value.(*sql.NullString); ok {
-				if s.Valid {
-					dataStrings[key] = "'" + sanitize(s.String) + "'"
-				} else {
-					dataStrings[key] = "NULL"
-				}
-			} else if s, ok := value.(*sql.NullInt64); ok {
-				if s.Valid {
-					dataStrings[key] = fmt.Sprintf("%d", s.Int64)
-				} else {
-					dataStrings[key] = "NULL"
-				}
-			} else if s, ok := value.(*sql.RawBytes); ok {
-				if len(*s) == 0 {
-					dataStrings[key] = "NULL"
-				} else {
-					dataStrings[key] = "_binary '" + sanitize(string(*s)) + "'"
-				}
+				dataStrings[key] = nullType
 			} else {
-				dataStrings[key] = fmt.Sprint("'", value, "'")
+				switch s := value.(type) {
+				case *sql.NullString:
+					if s.Valid {
+						dataStrings[key] = "'" + sanitize(s.String) + "'"
+					} else {
+						dataStrings[key] = nullType
+					}
+				case *sql.NullInt64:
+					if s.Valid {
+						dataStrings[key] = fmt.Sprintf("%d", s.Int64)
+					} else {
+						dataStrings[key] = nullType
+					}
+				case *sql.RawBytes:
+					if len(*s) == 0 {
+						dataStrings[key] = nullType
+					} else {
+						dataStrings[key] = "_binary '" + sanitize(string(*s)) + "'"
+					}
+				default:
+					dataStrings[key] = fmt.Sprint("'", value, "'")
+				}
 			}
 		}
 
