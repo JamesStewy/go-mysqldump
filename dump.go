@@ -35,7 +35,7 @@ type Data struct {
 type table struct {
 	Name   string
 	SQL    string
-	Values string
+	Values []string
 }
 
 type metaData struct {
@@ -44,7 +44,7 @@ type metaData struct {
 	CompleteTime  string
 }
 
-const version = "0.3.4"
+const version = "0.3.5"
 
 const headerTmpl = `-- Go SQL Dump {{ .DumpVersion }}
 --
@@ -81,7 +81,10 @@ DROP TABLE IF EXISTS {{ .Name }};
 LOCK TABLES {{ .Name }} WRITE;
 /*!40000 ALTER TABLE {{ .Name }} DISABLE KEYS */;
 {{- if .Values }}
-INSERT INTO {{ .Name }} VALUES {{ .Values }};
+INSERT INTO {{ .Name }} VALUES
+{{- range $index, $element := .Values -}}
+{{- if $index }},{{ else }} {{ end -}}{{ $element }}
+{{- end -}};
 {{- end }}
 /*!40000 ALTER TABLE {{ .Name }} ENABLE KEYS */;
 UNLOCK TABLES;
@@ -99,6 +102,8 @@ const footerTmpl = `/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 -- Dump completed on {{ .CompleteTime }}
 `
+
+const nullType = "NULL"
 
 // Dump data using struct
 func (data *Data) Dump() error {
@@ -260,25 +265,25 @@ func (data *Data) createTableSQL(name string) (string, error) {
 	return tableSQL.String, nil
 }
 
-func (data *Data) createTableValues(name string) (string, error) {
+func (data *Data) createTableValues(name string) ([]string, error) {
 	rows, err := data.Connection.Query("SELECT * FROM `" + name + "`")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if len(columns) == 0 {
-		return "", errors.New("No columns in table " + name + ".")
+		return nil, errors.New("No columns in table " + name + ".")
 	}
 
 	dataText := make([]string, 0)
 	tt, err := rows.ColumnTypes()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	types := make([]reflect.Type, len(tt))
@@ -302,39 +307,42 @@ func (data *Data) createTableValues(name string) (string, error) {
 	}
 	for rows.Next() {
 		if err := rows.Scan(values...); err != nil {
-			return "", err
+			return dataText, err
 		}
 
 		dataStrings := make([]string, len(columns))
 
 		for key, value := range values {
 			if value == nil {
-				dataStrings[key] = "NULL"
-			} else if s, ok := value.(*sql.NullString); ok {
-				if s.Valid {
-					dataStrings[key] = "'" + sanitize(s.String) + "'"
-				} else {
-					dataStrings[key] = "NULL"
-				}
-			} else if s, ok := value.(*sql.NullInt64); ok {
-				if s.Valid {
-					dataStrings[key] = fmt.Sprintf("%d", s.Int64)
-				} else {
-					dataStrings[key] = "NULL"
-				}
-			} else if s, ok := value.(*sql.RawBytes); ok {
-				if len(*s) == 0 {
-					dataStrings[key] = "NULL"
-				} else {
-					dataStrings[key] = "_binary '" + sanitize(string(*s)) + "'"
-				}
+				dataStrings[key] = nullType
 			} else {
-				dataStrings[key] = fmt.Sprint("'", value, "'")
+				switch s := value.(type) {
+				case *sql.NullString:
+					if s.Valid {
+						dataStrings[key] = "'" + sanitize(s.String) + "'"
+					} else {
+						dataStrings[key] = nullType
+					}
+				case *sql.NullInt64:
+					if s.Valid {
+						dataStrings[key] = fmt.Sprintf("%d", s.Int64)
+					} else {
+						dataStrings[key] = nullType
+					}
+				case *sql.RawBytes:
+					if len(*s) == 0 {
+						dataStrings[key] = nullType
+					} else {
+						dataStrings[key] = "_binary '" + sanitize(string(*s)) + "'"
+					}
+				default:
+					dataStrings[key] = fmt.Sprint("'", value, "'")
+				}
 			}
 		}
 
 		dataText = append(dataText, "("+strings.Join(dataStrings, ",")+")")
 	}
 
-	return strings.Join(dataText, ","), rows.Err()
+	return dataText, rows.Err()
 }
