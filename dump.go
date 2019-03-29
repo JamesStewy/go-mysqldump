@@ -84,10 +84,10 @@ DROP TABLE IF EXISTS {{ .NameEsc }};
 
 LOCK TABLES {{ .NameEsc }} WRITE;
 /*!40000 ALTER TABLE {{ .Name }} DISABLE KEYS */;
-{{- if .Values }}
-INSERT INTO {{ .Name }} VALUES
+{{- if .Next }}
+INSERT INTO {{ .Name }} VALUES {{ .RowValues }}
 {{- range .Next -}}
-, {{ end -}}{{ .RowValues }}
+, {{ .RowValues }}
 {{- end -}};
 {{- end }}
 /*!40000 ALTER TABLE {{ .Name }} ENABLE KEYS */;
@@ -319,7 +319,9 @@ func (table *table) Next() bool {
 			table.Err = err
 			return false
 		}
-	} else if table.rows.Next() {
+	}
+	// Fallthrough
+	if table.rows.Next() {
 		if err := table.rows.Scan(table.values...); err != nil {
 			table.Err = err
 			return false
