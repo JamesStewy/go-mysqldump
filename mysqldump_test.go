@@ -2,7 +2,6 @@ package mysqldump
 
 import (
 	"bytes"
-	"os"
 	"strings"
 	"testing"
 
@@ -10,39 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDumpOk(t *testing.T) {
-
-	tmpFile := "/tmp/test_format.sql"
-	os.Remove(tmpFile)
-
-	db, mock, err := sqlmock.New()
-	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
-	defer db.Close()
-
-	showTablesRows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
-		AddRow("Test_Table")
-
-	serverVersionRows := sqlmock.NewRows([]string{"Version()"}).
-		AddRow("test_version")
-
-	createTableRows := sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`email` char(60) DEFAULT NULL, `name` char(60), PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
-
-	createTableValueRows := sqlmock.NewRows([]string{"id", "email", "name"}).
-		AddRow(1, nil, "Test Name 1").
-		AddRow(2, "test2@test.de", "Test Name 2")
-
-	mock.ExpectQuery("^SELECT version()").WillReturnRows(serverVersionRows)
-	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(showTablesRows)
-	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(createTableRows)
-	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
-
-	buf := new(bytes.Buffer)
-	assert.NoError(t, Dump(db, buf), "an error was not expected when dumping a stub database connection")
-
-	result := strings.Replace(strings.Split(buf.String(), "-- Dump completed")[0], "`", "~", -1)
-
-	expected := `-- Go SQL Dump ` + version + `
+const expected = `-- Go SQL Dump ` + version + `
 --
 -- ------------------------------------------------------
 -- Server version	test_version
@@ -88,5 +55,46 @@ UNLOCK TABLES;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 `
+
+func RunDump(t testing.TB) string {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
+	defer db.Close()
+
+	showTablesRows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
+		AddRow("Test_Table")
+
+	serverVersionRows := sqlmock.NewRows([]string{"Version()"}).
+		AddRow("test_version")
+
+	createTableRows := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`email` char(60) DEFAULT NULL, `name` char(60), PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
+
+	createTableValueRows := sqlmock.NewRows([]string{"id", "email", "name"}).
+		AddRow(1, nil, "Test Name 1").
+		AddRow(2, "test2@test.de", "Test Name 2")
+
+	mock.ExpectQuery("^SELECT version()").WillReturnRows(serverVersionRows)
+	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(showTablesRows)
+	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(createTableRows)
+	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
+
+	var buf bytes.Buffer
+	assert.NoError(t, Dump(db, &buf), "an error was not expected when dumping a stub database connection")
+
+	return buf.String()
+}
+
+func TestDumpOk(t *testing.T) {
+	out := RunDump(t)
+
+	result := strings.Replace(strings.Split(out, "-- Dump completed")[0], "`", "~", -1)
+
 	assert.Equal(t, expected, result)
+}
+
+func BenchmarkDump(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_ = RunDump(b)
+	}
 }
