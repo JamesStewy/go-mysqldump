@@ -3,11 +3,11 @@ package mysqldump
 import (
 	"bytes"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDumpOk(t *testing.T) {
@@ -16,10 +16,7 @@ func TestDumpOk(t *testing.T) {
 	os.Remove(tmpFile)
 
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
-	}
-
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
 	defer db.Close()
 
 	showTablesRows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
@@ -41,12 +38,9 @@ func TestDumpOk(t *testing.T) {
 	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
 
 	buf := new(bytes.Buffer)
-	err = Dump(db, buf)
-	if err != nil {
-		t.Fatalf("an error '%s' was not expected when dumping a stub database connection", err)
-	}
+	assert.NoError(t, Dump(db, buf), "an error was not expected when dumping a stub database connection")
 
-	result := strings.Replace(strings.Split(buf.String(), "-- Dump completed")[0], "`", "\\", -1)
+	result := strings.Replace(strings.Split(buf.String(), "-- Dump completed")[0], "`", "~", -1)
 
 	expected := `-- Go SQL Dump ` + version + `
 --
@@ -65,23 +59,23 @@ func TestDumpOk(t *testing.T) {
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
--- Table structure for table \Test_Table\
+-- Table structure for table ~Test_Table~
 --
 
-DROP TABLE IF EXISTS \Test_Table\;
+DROP TABLE IF EXISTS ~Test_Table~;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
  SET character_set_client = utf8mb4 ;
-CREATE TABLE 'Test_Table' (\id\ int(11) NOT NULL AUTO_INCREMENT,\email\ char(60) DEFAULT NULL, \name\ char(60), PRIMARY KEY (\id\))ENGINE=InnoDB DEFAULT CHARSET=latin1;
+CREATE TABLE 'Test_Table' (~id~ int(11) NOT NULL AUTO_INCREMENT,~email~ char(60) DEFAULT NULL, ~name~ char(60), PRIMARY KEY (~id~))ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table \Test_Table\
+-- Dumping data for table ~Test_Table~
 --
 
-LOCK TABLES \Test_Table\ WRITE;
-/*!40000 ALTER TABLE \Test_Table\ DISABLE KEYS */;
-INSERT INTO \Test_Table\ VALUES ('1',NULL,'Test Name 1'),('2','test2@test.de','Test Name 2');
-/*!40000 ALTER TABLE \Test_Table\ ENABLE KEYS */;
+LOCK TABLES ~Test_Table~ WRITE;
+/*!40000 ALTER TABLE ~Test_Table~ DISABLE KEYS */;
+INSERT INTO ~Test_Table~ VALUES ('1',NULL,'Test Name 1'),('2','test2@test.de','Test Name 2');
+/*!40000 ALTER TABLE ~Test_Table~ ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -94,8 +88,5 @@ UNLOCK TABLES;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 `
-
-	if !reflect.DeepEqual(result, expected) {
-		t.Fatalf("expected \n%#v, got \n%#v", expected, result)
-	}
+	assert.Equal(t, expected, result)
 }

@@ -1,7 +1,9 @@
 package mysqldump
 
 import (
+	"bytes"
 	"reflect"
+	"strings"
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
@@ -153,9 +155,9 @@ func TestCreateTableRowValues(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.True(t, table.Next())
-	// TODO
-	result, err := table.RowValues()
-	assert.NoError(t, err)
+
+	result := table.RowValues()
+	assert.NoError(t, table.Err)
 
 	// we make sure that all expectations were met
 	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
@@ -184,8 +186,8 @@ func TestCreateTableAllValuesWithNil(t *testing.T) {
 
 	results := make([]string, 0)
 	for table.Next() {
-		row, err := table.RowValues()
-		assert.NoError(t, err)
+		row := table.RowValues()
+		assert.NoError(t, table.Err)
 		results = append(results, row)
 	}
 
@@ -199,9 +201,7 @@ func TestCreateTableAllValuesWithNil(t *testing.T) {
 
 func TestCreateTableOk(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
-	}
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
 
 	defer db.Close()
 
@@ -215,27 +215,43 @@ func TestCreateTableOk(t *testing.T) {
 	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(createTableRows)
 	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
 
+	var buf bytes.Buffer
 	data := Data{
 		Connection: db,
+		Out:        &buf,
 	}
 
-	result, err := data.createTable("Test_Table")
-	if err != nil {
-		t.Errorf("error was not expected while updating stats: %s", err)
-	}
+	assert.NoError(t, data.getTemplates())
+
+	table, err := data.createTable("Test_Table")
+	assert.NoError(t, err)
+
+	data.writeTable(table)
 
 	// we make sure that all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("there were unfulfilled expections: %s", err)
-	}
+	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
 
-	expectedResult := &table{
-		Name: "`Test_Table`",
-		// SQL:    "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1",
-		// Values: []string{"('1',NULL,'Test Name 1')", "('2','test2@test.de','Test Name 2')"},
-	}
+	expectedResult := `
+--
+-- Table structure for table ~Test_Table~
+--
 
-	if !reflect.DeepEqual(result, expectedResult) {
-		t.Fatalf("expected %#v, got %#v", expectedResult, result)
-	}
+DROP TABLE IF EXISTS ~Test_Table~;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+ SET character_set_client = utf8mb4 ;
+CREATE TABLE 'Test_Table' (~id~ int(11) NOT NULL AUTO_INCREMENT,~s~ char(60) DEFAULT NULL, PRIMARY KEY (~id~))ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table ~Test_Table~
+--
+
+LOCK TABLES ~Test_Table~ WRITE;
+/*!40000 ALTER TABLE ~Test_Table~ DISABLE KEYS */;
+INSERT INTO ~Test_Table~ VALUES ('1',NULL,'Test Name 1'),('2','test2@test.de','Test Name 2');
+/*!40000 ALTER TABLE ~Test_Table~ ENABLE KEYS */;
+UNLOCK TABLES;
+`
+	result := strings.Replace(buf.String(), "`", "~", -1)
+	assert.Equal(t, expectedResult, result)
 }

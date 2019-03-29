@@ -7,7 +7,6 @@ import (
 	"io"
 	"reflect"
 	"strings"
-	"sync"
 	"text/template"
 	"time"
 )
@@ -27,8 +26,6 @@ type Data struct {
 	headerTmpl *template.Template
 	tableTmpl  *template.Template
 	footerTmpl *template.Template
-	mux        sync.Mutex
-	wg         sync.WaitGroup
 	err        error
 }
 
@@ -69,7 +66,7 @@ const headerTmpl = `-- Go SQL Dump {{ .DumpVersion }}
 
 const tableTmpl = `
 --
--- Table structure for table {{ .Name }}
+-- Table structure for table {{ .NameEsc }}
 --
 
 DROP TABLE IF EXISTS {{ .NameEsc }};
@@ -79,18 +76,16 @@ DROP TABLE IF EXISTS {{ .NameEsc }};
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table {{ .Name }}
+-- Dumping data for table {{ .NameEsc }}
 --
 
 LOCK TABLES {{ .NameEsc }} WRITE;
-/*!40000 ALTER TABLE {{ .Name }} DISABLE KEYS */;
+/*!40000 ALTER TABLE {{ .NameEsc }} DISABLE KEYS */;
 {{- if .Next }}
-INSERT INTO {{ .Name }} VALUES {{ .RowValues }}
-{{- range .Next -}}
-, {{ .RowValues }}
-{{- end -}};
+INSERT INTO {{ .NameEsc }} VALUES {{ .RowValues }}
+{{- range $value := .Stream }},{{ $value }}{{ end -}};
 {{- end }}
-/*!40000 ALTER TABLE {{ .Name }} ENABLE KEYS */;
+/*!40000 ALTER TABLE {{ .NameEsc }} ENABLE KEYS */;
 UNLOCK TABLES;
 `
 
@@ -132,13 +127,11 @@ func (data *Data) Dump() error {
 		return err
 	}
 
-	data.wg.Add(len(tables))
 	for _, name := range tables {
 		if err := data.dumpTable(name); err != nil {
 			return err
 		}
 	}
-	data.wg.Wait()
 	if data.err != nil {
 		return data.err
 	}
@@ -160,24 +153,14 @@ func (data *Data) dumpTable(name string) error {
 		return err
 	}
 
-	go data.writeTable(table)
-	return nil
+	return data.writeTable(table)
 }
 
-func (data *Data) writeTable(table *table) {
-	// Keep a counter of how many tables have been written
-	defer data.wg.Done()
-
-	// Force this method into serial
-	data.mux.Lock()
-	defer data.mux.Unlock()
-
-	if data.err != nil {
-		return
-	} else if err := data.tableTmpl.Execute(data.Out, table); err != nil {
-		data.err = err
+func (data *Data) writeTable(table *table) error {
+	if err := data.tableTmpl.Execute(data.Out, table); err != nil {
+		return err
 	}
-	return
+	return table.Err
 }
 
 // MARK: get methods
@@ -255,11 +238,10 @@ func (table *table) NameEsc() string {
 
 func (table *table) CreateSQL() (string, error) {
 	var tableReturn, tableSQL sql.NullString
-	err := table.data.Connection.QueryRow("SHOW CREATE TABLE "+table.NameEsc()).Scan(&tableReturn, &tableSQL)
-
-	if err != nil {
+	if err := table.data.Connection.QueryRow("SHOW CREATE TABLE "+table.NameEsc()).Scan(&tableReturn, &tableSQL); err != nil {
 		return "", err
 	}
+
 	if tableReturn.String != table.Name {
 		return "", errors.New("Returned table is not the same as requested table")
 	}
@@ -325,6 +307,9 @@ func (table *table) Next() bool {
 		if err := table.rows.Scan(table.values...); err != nil {
 			table.Err = err
 			return false
+		} else if err := table.rows.Err(); err != nil {
+			table.Err = err
+			return false
 		}
 	} else {
 		table.rows.Close()
@@ -334,37 +319,46 @@ func (table *table) Next() bool {
 	return true
 }
 
-func (table *table) RowValues() (string, error) {
+func (table *table) RowValues() string {
 	dataStrings := make([]string, len(table.values))
 
 	for key, value := range table.values {
-		if value == nil {
+		switch s := value.(type) {
+		case nil:
 			dataStrings[key] = nullType
-		} else {
-			switch s := value.(type) {
-			case *sql.NullString:
-				if s.Valid {
-					dataStrings[key] = "'" + sanitize(s.String) + "'"
-				} else {
-					dataStrings[key] = nullType
-				}
-			case *sql.NullInt64:
-				if s.Valid {
-					dataStrings[key] = fmt.Sprintf("%d", s.Int64)
-				} else {
-					dataStrings[key] = nullType
-				}
-			case *sql.RawBytes:
-				if len(*s) == 0 {
-					dataStrings[key] = nullType
-				} else {
-					dataStrings[key] = "_binary '" + sanitize(string(*s)) + "'"
-				}
-			default:
-				dataStrings[key] = fmt.Sprint("'", value, "'")
+		case *sql.NullString:
+			if s.Valid {
+				dataStrings[key] = "'" + sanitize(s.String) + "'"
+			} else {
+				dataStrings[key] = nullType
 			}
+		case *sql.NullInt64:
+			if s.Valid {
+				dataStrings[key] = fmt.Sprintf("%d", s.Int64)
+			} else {
+				dataStrings[key] = nullType
+			}
+		case *sql.RawBytes:
+			if len(*s) == 0 {
+				dataStrings[key] = nullType
+			} else {
+				dataStrings[key] = "_binary '" + sanitize(string(*s)) + "'"
+			}
+		default:
+			dataStrings[key] = fmt.Sprint("'", value, "'")
 		}
 	}
 
-	return "(" + strings.Join(dataStrings, ",") + ")", table.rows.Err()
+	return "(" + strings.Join(dataStrings, ",") + ")"
+}
+
+func (table *table) Stream() <-chan string {
+	valueOut := make(chan string, 1)
+	go func(out chan string) {
+		defer close(out)
+		for table.Next() {
+			out <- table.RowValues()
+		}
+	}(valueOut)
+	return valueOut
 }
