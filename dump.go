@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"runtime"
 	"text/template"
 	"time"
 )
@@ -395,17 +394,6 @@ func (table *table) Stream() <-chan string {
 				insert.WriteString(",")
 			}
 			b.WriteTo(&insert)
-
-			// debug
-			var m runtime.MemStats
-			runtime.ReadMemStats(&m)
-			// For info on each, see: https://golang.org/pkg/runtime/#MemStats
-			fmt.Print("\tBuffer = ", bToMiB(uint64(insert.Len())), " MiB")
-			fmt.Print("\tCapacity = ", bToMiB(uint64(insert.Cap())), " MiB")
-			fmt.Print("\tAlloc = ", bToMiB(m.Alloc), " MiB")
-			fmt.Print("\tTotalAlloc = ", bToMiB(m.TotalAlloc), " MiB")
-			fmt.Print("\tSys = ", bToMiB(m.Sys), " MiB")
-			fmt.Print("\tNumGC = ", m.NumGC, "\n")
 		}
 		if insert.Len() != 0 {
 			insert.WriteString(";")
@@ -413,8 +401,4 @@ func (table *table) Stream() <-chan string {
 		}
 	}()
 	return valueOut
-}
-
-func bToMiB(b uint64) uint64 {
-	return b / 1024 / 1024
 }
