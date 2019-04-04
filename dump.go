@@ -47,7 +47,7 @@ type metaData struct {
 }
 
 const (
-	// Version is exported for other builds
+	// Version of this plugin for easy reference
 	Version = "0.4.1"
 
 	defaultMaxAllowedPacket = 4194304
