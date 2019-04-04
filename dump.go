@@ -1,12 +1,12 @@
 package mysqldump
 
 import (
+	"bytes"
 	"database/sql"
 	"errors"
 	"fmt"
 	"io"
 	"reflect"
-	"strings"
 	"text/template"
 	"time"
 )
@@ -19,9 +19,10 @@ Data struct to configure dump behavior
     IgnoreTables: Mark sensitive tables to ignore
 */
 type Data struct {
-	Out          io.Writer
-	Connection   *sql.DB
-	IgnoreTables []string
+	Out              io.Writer
+	Connection       *sql.DB
+	IgnoreTables     []string
+	MaxAllowedPacket int
 
 	headerTmpl *template.Template
 	tableTmpl  *template.Template
@@ -45,7 +46,10 @@ type metaData struct {
 	CompleteTime  string
 }
 
-const version = "0.4.0"
+const (
+	version                 = "0.4.1"
+	defaultMaxAllowedPacket = 4194304
+)
 
 // takes a *metaData
 const headerTmpl = `-- Go SQL Dump {{ .DumpVersion }}
@@ -97,10 +101,9 @@ DROP TABLE IF EXISTS {{ .NameEsc }};
 
 LOCK TABLES {{ .NameEsc }} WRITE;
 /*!40000 ALTER TABLE {{ .NameEsc }} DISABLE KEYS */;
-{{- if .Next }}
-INSERT INTO {{ .NameEsc }} VALUES {{ .RowValues }}
-{{- range $value := .Stream }},{{ $value }}{{ end -}};
-{{- end }}
+{{ range $value := .Stream }}
+{{- $value }}
+{{ end -}}
 /*!40000 ALTER TABLE {{ .NameEsc }} ENABLE KEYS */;
 UNLOCK TABLES;
 `
@@ -112,6 +115,7 @@ func (data *Data) Dump() error {
 	meta := metaData{
 		DumpVersion: version,
 	}
+	data.initMaxPacketSize()
 
 	if err := meta.updateServerVersion(data.Connection); err != nil {
 		return err
@@ -187,6 +191,17 @@ func (data *Data) getTemplates() (err error) {
 	return
 }
 
+func (data *Data) initMaxPacketSize() {
+	if data.MaxAllowedPacket <= 0 {
+		data.MaxAllowedPacket = defaultMaxAllowedPacket
+
+		var maxSize int
+		if err := data.Connection.QueryRow("SELECT @@global.max_allowed_packet;").Scan(&maxSize); err == nil {
+			data.MaxAllowedPacket = maxSize
+		}
+	}
+}
+
 func (data *Data) getTables() ([]string, error) {
 	tables := make([]string, 0)
 
@@ -219,7 +234,7 @@ func (data *Data) isIgnoredTable(name string) bool {
 
 func (data *metaData) updateServerVersion(db *sql.DB) (err error) {
 	var serverVersion sql.NullString
-	err = db.QueryRow("SELECT version()").Scan(&serverVersion)
+	err = db.QueryRow("SELECT version();").Scan(&serverVersion)
 	data.ServerVersion = serverVersion.String
 	return
 }
@@ -323,45 +338,74 @@ func (table *table) Next() bool {
 }
 
 func (table *table) RowValues() string {
-	dataStrings := make([]string, len(table.values))
+	return table.RowBuffer().String()
+}
+
+func (table *table) RowBuffer() *bytes.Buffer {
+	var b bytes.Buffer
+	b.WriteString("(")
 
 	for key, value := range table.values {
+		if key != 0 {
+			b.WriteString(",")
+		}
 		switch s := value.(type) {
 		case nil:
-			dataStrings[key] = nullType
+			b.WriteString(nullType)
 		case *sql.NullString:
 			if s.Valid {
-				dataStrings[key] = "'" + sanitize(s.String) + "'"
+				fmt.Fprintf(&b, "'%s'", sanitize(s.String))
 			} else {
-				dataStrings[key] = nullType
+				b.WriteString(nullType)
 			}
 		case *sql.NullInt64:
 			if s.Valid {
-				dataStrings[key] = fmt.Sprintf("%d", s.Int64)
+				fmt.Fprintf(&b, "%d", s.Int64)
 			} else {
-				dataStrings[key] = nullType
+				b.WriteString(nullType)
 			}
 		case *sql.RawBytes:
 			if len(*s) == 0 {
-				dataStrings[key] = nullType
+				b.WriteString(nullType)
 			} else {
-				dataStrings[key] = "_binary '" + sanitize(string(*s)) + "'"
+				fmt.Fprintf(&b, "_binary '%s'", sanitize(string(*s)))
 			}
 		default:
-			dataStrings[key] = fmt.Sprint("'", value, "'")
+			fmt.Fprintf(&b, "'%s'", value)
 		}
 	}
+	b.WriteString(")")
 
-	return "(" + strings.Join(dataStrings, ",") + ")"
+	return &b
 }
 
 func (table *table) Stream() <-chan string {
 	valueOut := make(chan string, 1)
-	go func(out chan string) {
-		defer close(out)
+	go func() {
+		defer close(valueOut)
+		var insert bytes.Buffer
+
 		for table.Next() {
-			out <- table.RowValues()
+			b := table.RowBuffer()
+			// Truncate our insert if it won't fit
+			if insert.Len() != 0 && insert.Len()+b.Len() > table.data.MaxAllowedPacket-1 {
+				insert.WriteString(";")
+				valueOut <- insert.String()
+				insert.Reset()
+			}
+
+			if insert.Len() == 0 {
+				fmt.Fprintf(&insert, "INSERT INTO %s VALUES ", table.NameEsc())
+			} else {
+				insert.WriteString(",")
+			}
+			b.WriteTo(&insert)
+			b.Reset()
 		}
-	}(valueOut)
+		if insert.Len() != 0 {
+			insert.WriteString(";")
+			valueOut <- insert.String()
+		}
+	}()
 	return valueOut
 }
