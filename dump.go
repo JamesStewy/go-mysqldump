@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"runtime"
 	"text/template"
 	"time"
 )
@@ -47,7 +48,9 @@ type metaData struct {
 }
 
 const (
-	version                 = "0.4.1"
+	// Version is exported for other builds
+	Version = "0.4.1"
+
 	defaultMaxAllowedPacket = 4194304
 )
 
@@ -113,9 +116,12 @@ const nullType = "NULL"
 // Dump data using struct
 func (data *Data) Dump() error {
 	meta := metaData{
-		DumpVersion: version,
+		DumpVersion: Version,
 	}
-	data.initMaxPacketSize()
+
+	if data.MaxAllowedPacket == 0 {
+		data.MaxAllowedPacket = defaultMaxAllowedPacket
+	}
 
 	if err := meta.updateServerVersion(data.Connection); err != nil {
 		return err
@@ -189,17 +195,6 @@ func (data *Data) getTemplates() (err error) {
 		return
 	}
 	return
-}
-
-func (data *Data) initMaxPacketSize() {
-	if data.MaxAllowedPacket <= 0 {
-		data.MaxAllowedPacket = defaultMaxAllowedPacket
-
-		var maxSize int
-		if err := data.Connection.QueryRow("SELECT @@global.max_allowed_packet;").Scan(&maxSize); err == nil {
-			data.MaxAllowedPacket = maxSize
-		}
-	}
 }
 
 func (data *Data) getTables() ([]string, error) {
@@ -400,7 +395,17 @@ func (table *table) Stream() <-chan string {
 				insert.WriteString(",")
 			}
 			b.WriteTo(&insert)
-			b.Reset()
+
+			// debug
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			// For info on each, see: https://golang.org/pkg/runtime/#MemStats
+			fmt.Print("\tBuffer = ", bToMiB(uint64(insert.Len())), " MiB")
+			fmt.Print("\tCapacity = ", bToMiB(uint64(insert.Cap())), " MiB")
+			fmt.Print("\tAlloc = ", bToMiB(m.Alloc), " MiB")
+			fmt.Print("\tTotalAlloc = ", bToMiB(m.TotalAlloc), " MiB")
+			fmt.Print("\tSys = ", bToMiB(m.Sys), " MiB")
+			fmt.Print("\tNumGC = ", m.NumGC, "\n")
 		}
 		if insert.Len() != 0 {
 			insert.WriteString(";")
@@ -408,4 +413,8 @@ func (table *table) Stream() <-chan string {
 		}
 	}()
 	return valueOut
+}
+
+func bToMiB(b uint64) uint64 {
+	return b / 1024 / 1024
 }
