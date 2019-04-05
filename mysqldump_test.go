@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const expected = `-- Go SQL Dump ` + version + `
+const expected = `-- Go SQL Dump ` + Version + `
 --
 -- ------------------------------------------------------
 -- Server version	test_version
