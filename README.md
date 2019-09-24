@@ -23,9 +23,9 @@ func main() {
   config.Addr = "your-hostname:your-port"
 
   dumpDir := "dumps"  // you should create this directory
-  dumpFilenameFormat := fmt.Sprintf("%s-20060102T150405", dbname)   // accepts time layout string and add .sql at the end of file
+  dumpFilenameFormat := fmt.Sprintf("%s-20060102T150405", config.DBName)   // accepts time layout string and add .sql at the end of file
 
-  db, err := sql.Open("mysql", config.FormatDNS())
+  db, err := sql.Open("mysql", config.FormatDSN())
   if err != nil {
     fmt.Println("Error opening database: ", err)
     return
@@ -39,12 +39,12 @@ func main() {
   }
 
   // Dump database to file
-  resultFilename, err := dumper.Dump()
+  err := dumper.Dump()
   if err != nil {
     fmt.Println("Error dumping:", err)
     return
   }
-  fmt.Printf("File is saved to %s", resultFilename)
+  fmt.Printf("File is saved to %s", dumpFilenameFormat)
 
   // Close dumper, connected database and file stream.
   dumper.Close()
