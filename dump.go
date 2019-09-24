@@ -23,6 +23,7 @@ type Data struct {
 	Connection       *sql.DB
 	IgnoreTables     []string
 	MaxAllowedPacket int
+	LockTables       bool
 
 	headerTmpl *template.Template
 	tableTmpl  *template.Template
@@ -139,6 +140,24 @@ func (data *Data) Dump() error {
 		return err
 	}
 
+	// Lock all tables before dumping if present
+	if data.LockTables && len(tables) > 0 {
+		var b bytes.Buffer
+		b.WriteString("LOCK TABLES ")
+		for index, name := range tables {
+			if index != 0 {
+				b.WriteString(",")
+			}
+			b.WriteString("`" + name + "` READ /*!32311 LOCAL */")
+		}
+
+		if _, err := data.Connection.Exec(b.String()); err != nil {
+			return err
+		}
+
+		defer data.Connection.Exec("UNLOCK TABLES")
+	}
+
 	for _, name := range tables {
 		if err := data.dumpTable(name); err != nil {
 			return err
@@ -160,11 +179,7 @@ func (data *Data) dumpTable(name string) error {
 	if data.err != nil {
 		return data.err
 	}
-	table, err := data.createTable(name)
-	if err != nil {
-		return err
-	}
-
+	table := data.createTable(name)
 	return data.writeTable(table)
 }
 
@@ -228,20 +243,18 @@ func (data *Data) isIgnoredTable(name string) bool {
 
 func (data *metaData) updateServerVersion(db *sql.DB) (err error) {
 	var serverVersion sql.NullString
-	err = db.QueryRow("SELECT version();").Scan(&serverVersion)
+	err = db.QueryRow("SELECT version()").Scan(&serverVersion)
 	data.ServerVersion = serverVersion.String
 	return
 }
 
 // MARK: create methods
 
-func (data *Data) createTable(name string) (*table, error) {
-	t := &table{
+func (data *Data) createTable(name string) *table {
+	return &table{
 		Name: name,
 		data: data,
 	}
-
-	return t, nil
 }
 
 func (table *table) NameEsc() string {

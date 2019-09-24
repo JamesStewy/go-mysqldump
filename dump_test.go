@@ -120,8 +120,7 @@ func TestCreateTableSQLOk(t *testing.T) {
 		Connection: db,
 	}
 
-	table, err := data.createTable("Test_Table")
-	assert.NoError(t, err)
+	table := data.createTable("Test_Table")
 
 	result, err := table.CreateSQL()
 	assert.NoError(t, err)
@@ -151,8 +150,7 @@ func TestCreateTableRowValues(t *testing.T) {
 		Connection: db,
 	}
 
-	table, err := data.createTable("test")
-	assert.NoError(t, err)
+	table := data.createTable("test")
 
 	assert.True(t, table.Next())
 
@@ -181,8 +179,7 @@ func TestCreateTableValuesSteam(t *testing.T) {
 		MaxAllowedPacket: 4096,
 	}
 
-	table, err := data.createTable("test")
-	assert.NoError(t, err)
+	table := data.createTable("test")
 
 	s := table.Stream()
 	assert.EqualValues(t, "INSERT INTO `test` VALUES ('1','test@test.de','Test Name 1'),('2','test2@test.de','Test Name 2');", <-s)
@@ -207,8 +204,7 @@ func TestCreateTableValuesSteamSmallPackets(t *testing.T) {
 		MaxAllowedPacket: 64,
 	}
 
-	table, err := data.createTable("test")
-	assert.NoError(t, err)
+	table := data.createTable("test")
 
 	s := table.Stream()
 	assert.EqualValues(t, "INSERT INTO `test` VALUES ('1','test@test.de','Test Name 1');", <-s)
@@ -234,8 +230,7 @@ func TestCreateTableAllValuesWithNil(t *testing.T) {
 		Connection: db,
 	}
 
-	table, err := data.createTable("test")
-	assert.NoError(t, err)
+	table := data.createTable("test")
 
 	results := make([]string, 0)
 	for table.Next() {
@@ -277,8 +272,7 @@ func TestCreateTableOk(t *testing.T) {
 
 	assert.NoError(t, data.getTemplates())
 
-	table, err := data.createTable("Test_Table")
-	assert.NoError(t, err)
+	table := data.createTable("Test_Table")
 
 	data.writeTable(table)
 
@@ -335,8 +329,7 @@ func TestCreateTableOkSmallPackets(t *testing.T) {
 
 	assert.NoError(t, data.getTemplates())
 
-	table, err := data.createTable("Test_Table")
-	assert.NoError(t, err)
+	table := data.createTable("Test_Table")
 
 	data.writeTable(table)
 
