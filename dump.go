@@ -49,7 +49,7 @@ type metaData struct {
 
 const (
 	// Version of this plugin for easy reference
-	Version = "0.4.1"
+	Version = "0.5.0"
 
 	defaultMaxAllowedPacket = 4194304
 )
