@@ -2,6 +2,7 @@ package mysqldump
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -14,19 +15,17 @@ import (
 /*
 Data struct to configure dump behavior
 
-    Out:               Stream to wite to
-    Connection:        Database connection to dump
-    IgnoreTables:      Mark sensitive tables to ignore
-    LockTables:        Lock all tables for the duration of the dump
-    SingleTransaction: Do the entire dump in one transaction
+    Out:          Stream to wite to
+    Connection:   Database connection to dump
+    IgnoreTables: Mark sensitive tables to ignore
+    LockTables:   Lock all tables for the duration of the dump
 */
 type Data struct {
-	Out               io.Writer
-	Connection        *sql.DB
-	IgnoreTables      []string
-	MaxAllowedPacket  int
-	LockTables        bool
-	SingleTransaction bool
+	Out              io.Writer
+	Connection       *sql.DB
+	IgnoreTables     []string
+	MaxAllowedPacket int
+	LockTables       bool
 
 	tx         *sql.Tx
 	headerTmpl *template.Template
@@ -131,16 +130,16 @@ func (data *Data) Dump() error {
 		return err
 	}
 
-	if err := data.headerTmpl.Execute(data.Out, meta); err != nil {
-		return err
-	}
-
 	if err := data.begin(); err != nil {
 		return err
 	}
 	defer data.rollback()
 
 	if err := meta.updateServerVersion(data); err != nil {
+		return err
+	}
+
+	if err := data.headerTmpl.Execute(data.Out, meta); err != nil {
 		return err
 	}
 
@@ -183,7 +182,7 @@ func (data *Data) Dump() error {
 // MARK: - Private methods
 
 func (data *Data) begin() (err error) {
-	data.tx, err = data.Connection.BeginTx(nil, &sql.TxOptions{
+	data.tx, err = data.Connection.BeginTx(context.Background(), &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,
 	})
