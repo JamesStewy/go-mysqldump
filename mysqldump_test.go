@@ -76,11 +76,13 @@ func RunDump(t testing.TB, data *Data) {
 		AddRow(1, nil, "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2")
 
+	mock.ExpectBegin()
 	mock.ExpectQuery(`^SELECT version\(\)$`).WillReturnRows(serverVersionRows)
-	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(showTablesRows)
+	mock.ExpectQuery(`^SHOW TABLES$`).WillReturnRows(showTablesRows)
 	mock.ExpectExec("^LOCK TABLES `Test_Table` READ /\\*!32311 LOCAL \\*/$").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(createTableRows)
 	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
+	mock.ExpectRollback()
 
 	assert.NoError(t, data.Dump(), "an error was not expected when dumping a stub database connection")
 }
@@ -124,10 +126,12 @@ func TestNoLockOk(t *testing.T) {
 		AddRow(1, nil, "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2")
 
+	mock.ExpectBegin()
 	mock.ExpectQuery(`^SELECT version\(\)$`).WillReturnRows(serverVersionRows)
-	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(showTablesRows)
+	mock.ExpectQuery(`^SHOW TABLES$`).WillReturnRows(showTablesRows)
 	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(createTableRows)
 	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
+	mock.ExpectRollback()
 
 	assert.NoError(t, data.Dump(), "an error was not expected when dumping a stub database connection")
 

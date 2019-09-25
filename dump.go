@@ -14,17 +14,21 @@ import (
 /*
 Data struct to configure dump behavior
 
-    Out:          Stream to wite to
-    Connection:   Database connection to dump
-    IgnoreTables: Mark sensitive tables to ignore
+    Out:               Stream to wite to
+    Connection:        Database connection to dump
+    IgnoreTables:      Mark sensitive tables to ignore
+    LockTables:        Lock all tables for the duration of the dump
+    SingleTransaction: Do the entire dump in one transaction
 */
 type Data struct {
-	Out              io.Writer
-	Connection       *sql.DB
-	IgnoreTables     []string
-	MaxAllowedPacket int
-	LockTables       bool
+	Out               io.Writer
+	Connection        *sql.DB
+	IgnoreTables      []string
+	MaxAllowedPacket  int
+	LockTables        bool
+	SingleTransaction bool
 
+	tx         *sql.Tx
 	headerTmpl *template.Template
 	tableTmpl  *template.Template
 	footerTmpl *template.Template
@@ -49,7 +53,7 @@ type metaData struct {
 
 const (
 	// Version of this plugin for easy reference
-	Version = "0.5.0"
+	Version = "0.6.0"
 
 	defaultMaxAllowedPacket = 4194304
 )
@@ -123,15 +127,20 @@ func (data *Data) Dump() error {
 		data.MaxAllowedPacket = defaultMaxAllowedPacket
 	}
 
-	if err := meta.updateServerVersion(data.Connection); err != nil {
-		return err
-	}
-
 	if err := data.getTemplates(); err != nil {
 		return err
 	}
 
 	if err := data.headerTmpl.Execute(data.Out, meta); err != nil {
+		return err
+	}
+
+	if err := data.begin(); err != nil {
+		return err
+	}
+	defer data.rollback()
+
+	if err := meta.updateServerVersion(data); err != nil {
 		return err
 	}
 
@@ -172,6 +181,18 @@ func (data *Data) Dump() error {
 }
 
 // MARK: - Private methods
+
+func (data *Data) begin() (err error) {
+	data.tx, err = data.Connection.BeginTx(nil, &sql.TxOptions{
+		Isolation: sql.LevelRepeatableRead,
+		ReadOnly:  true,
+	})
+	return
+}
+
+func (data *Data) rollback() error {
+	return data.tx.Rollback()
+}
 
 // MARK: writter methods
 
@@ -214,7 +235,7 @@ func (data *Data) getTemplates() (err error) {
 func (data *Data) getTables() ([]string, error) {
 	tables := make([]string, 0)
 
-	rows, err := data.Connection.Query("SHOW TABLES")
+	rows, err := data.tx.Query("SHOW TABLES")
 	if err != nil {
 		return tables, err
 	}
@@ -241,10 +262,10 @@ func (data *Data) isIgnoredTable(name string) bool {
 	return false
 }
 
-func (data *metaData) updateServerVersion(db *sql.DB) (err error) {
+func (meta *metaData) updateServerVersion(data *Data) (err error) {
 	var serverVersion sql.NullString
-	err = db.QueryRow("SELECT version()").Scan(&serverVersion)
-	data.ServerVersion = serverVersion.String
+	err = data.tx.QueryRow("SELECT version()").Scan(&serverVersion)
+	meta.ServerVersion = serverVersion.String
 	return
 }
 
@@ -263,7 +284,7 @@ func (table *table) NameEsc() string {
 
 func (table *table) CreateSQL() (string, error) {
 	var tableReturn, tableSQL sql.NullString
-	if err := table.data.Connection.QueryRow("SHOW CREATE TABLE "+table.NameEsc()).Scan(&tableReturn, &tableSQL); err != nil {
+	if err := table.data.tx.QueryRow("SHOW CREATE TABLE "+table.NameEsc()).Scan(&tableReturn, &tableSQL); err != nil {
 		return "", err
 	}
 
@@ -280,7 +301,7 @@ func (table *table) Init() (err error) {
 		return errors.New("can't init twice")
 	}
 
-	table.rows, err = table.data.Connection.Query("SELECT * FROM " + table.NameEsc())
+	table.rows, err = table.data.tx.Query("SELECT * FROM " + table.NameEsc())
 	if err != nil {
 		return err
 	}

@@ -10,20 +10,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetTablesOk(t *testing.T) {
+func GetMockData() (data *Data, mock sqlmock.Sqlmock, err error) {
 	db, mock, err := sqlmock.New()
+	if err != nil {
+		return
+	}
+	mock.ExpectBegin()
+
+	data = &Data{
+		Connection: db,
+	}
+	err = data.begin()
+	return
+}
+
+func TestGetTablesOk(t *testing.T) {
+	data, mock, err := GetMockData()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
-	defer db.Close()
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
 		AddRow("Test_Table_1").
 		AddRow("Test_Table_2")
 
 	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(rows)
-
-	data := Data{
-		Connection: db,
-	}
 
 	result, err := data.getTables()
 	assert.NoError(t, err)
@@ -94,11 +104,15 @@ func TestGetServerVersionOk(t *testing.T) {
 	rows := sqlmock.NewRows([]string{"Version()"}).
 		AddRow("test_version")
 
+	mock.ExpectBegin()
 	mock.ExpectQuery("^SELECT version()").WillReturnRows(rows)
 
 	meta := metaData{}
 
-	assert.NoError(t, meta.updateServerVersion(db), "error was not expected while updating stats")
+	tx, _ := db.Begin()
+	assert.NoError(t, meta.updateServerVersion(&Data{
+		tx: tx,
+	}), "error was not expected while updating stats")
 
 	// we make sure that all expectations were met
 	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
