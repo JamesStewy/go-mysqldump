@@ -15,10 +15,11 @@ import (
 /*
 Data struct to configure dump behavior
 
-    Out:          Stream to wite to
-    Connection:   Database connection to dump
-    IgnoreTables: Mark sensitive tables to ignore
-    LockTables:   Lock all tables for the duration of the dump
+    Out:              Stream to wite to
+    Connection:       Database connection to dump
+    IgnoreTables:     Mark sensitive tables to ignore
+	MaxAllowedPacket: Sets the largest packet size to use in backups
+    LockTables:       Lock all tables for the duration of the dump
 */
 type Data struct {
 	Out              io.Writer
@@ -130,6 +131,9 @@ func (data *Data) Dump() error {
 		return err
 	}
 
+	// Start the read only transaction and defer the rollback until the end
+	// This way the database will have the exact state it did at the begining of
+	// the backup and nothing can be accidentally committed
 	if err := data.begin(); err != nil {
 		return err
 	}
@@ -181,6 +185,8 @@ func (data *Data) Dump() error {
 
 // MARK: - Private methods
 
+// begin starts a read only transaction that will be whatever the database was
+// when it was called
 func (data *Data) begin() (err error) {
 	data.tx, err = data.Connection.BeginTx(context.Background(), &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
@@ -189,6 +195,7 @@ func (data *Data) begin() (err error) {
 	return
 }
 
+// rollback cancels the transaction
 func (data *Data) rollback() error {
 	return data.tx.Rollback()
 }
@@ -294,7 +301,6 @@ func (table *table) CreateSQL() (string, error) {
 	return tableSQL.String, nil
 }
 
-// defer rows.Close()
 func (table *table) Init() (err error) {
 	if len(table.types) != 0 {
 		return errors.New("can't init twice")
