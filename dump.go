@@ -18,7 +18,7 @@ Data struct to configure dump behavior
     Out:              Stream to wite to
     Connection:       Database connection to dump
     IgnoreTables:     Mark sensitive tables to ignore
-	MaxAllowedPacket: Sets the largest packet size to use in backups
+    MaxAllowedPacket: Sets the largest packet size to use in backups
     LockTables:       Lock all tables for the duration of the dump
 */
 type Data struct {
