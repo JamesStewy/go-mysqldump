@@ -39,17 +39,17 @@ func Register(db *sql.DB, dir, format string) (*Data, error) {
 	return &Data{
 		Out:        f,
 		Connection: db,
+		LockTables: true,
 	}, nil
 }
 
 // Dump Creates a MYSQL dump from the connection to the stream.
 func Dump(db *sql.DB, out io.Writer) error {
-	data := Data{
+	return (&Data{
 		Connection: db,
 		Out:        out,
-	}
-
-	return data.Dump()
+		LockTables: true,
+	}).Dump()
 }
 
 // Close the dumper.
