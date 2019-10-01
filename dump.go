@@ -325,6 +325,7 @@ func (table *table) Init() (err error) {
 	}
 
 	table.types = make([]reflect.Type, len(tt))
+	table.values = make([]interface{}, len(tt))
 	for i, tp := range tt {
 		st := tp.ScanType()
 		if tp.DatabaseTypeName() == "BLOB" {
@@ -338,9 +339,6 @@ func (table *table) Init() (err error) {
 		} else {
 			table.types[i] = reflect.TypeOf(sql.NullString{})
 		}
-	}
-	table.values = make([]interface{}, len(tt))
-	for i := range table.values {
 		table.values[i] = reflect.New(table.types[i]).Interface()
 	}
 	return nil
