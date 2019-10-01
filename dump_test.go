@@ -2,6 +2,7 @@ package mysqldump
 
 import (
 	"bytes"
+	"database/sql"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,20 +11,31 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func getMockData() (data *Data, mock sqlmock.Sqlmock, err error) {
+	var db *sql.DB
+	db, mock, err = sqlmock.New()
+	if err != nil {
+		return
+	}
+	mock.ExpectBegin()
+
+	data = &Data{
+		Connection: db,
+	}
+	err = data.begin()
+	return
+}
+
 func TestGetTablesOk(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	data, mock, err := getMockData()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
-	defer db.Close()
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
 		AddRow("Test_Table_1").
 		AddRow("Test_Table_2")
 
 	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(rows)
-
-	data := Data{
-		Connection: db,
-	}
 
 	result, err := data.getTables()
 	assert.NoError(t, err)
@@ -35,9 +47,9 @@ func TestGetTablesOk(t *testing.T) {
 }
 
 func TestIgnoreTablesOk(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	data, mock, err := getMockData()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
-	defer db.Close()
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
 		AddRow("Test_Table_1").
@@ -45,10 +57,7 @@ func TestIgnoreTablesOk(t *testing.T) {
 
 	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(rows)
 
-	data := Data{
-		Connection:   db,
-		IgnoreTables: []string{"Test_Table_1"},
-	}
+	data.IgnoreTables = []string{"Test_Table_1"}
 
 	result, err := data.getTables()
 	assert.NoError(t, err)
@@ -60,10 +69,9 @@ func TestIgnoreTablesOk(t *testing.T) {
 }
 
 func TestGetTablesNil(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	data, mock, err := getMockData()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
-
-	defer db.Close()
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
 		AddRow("Test_Table_1").
@@ -71,10 +79,6 @@ func TestGetTablesNil(t *testing.T) {
 		AddRow("Test_Table_3")
 
 	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(rows)
-
-	data := Data{
-		Connection: db,
-	}
 
 	result, err := data.getTables()
 	assert.NoError(t, err)
@@ -86,10 +90,9 @@ func TestGetTablesNil(t *testing.T) {
 }
 
 func TestGetServerVersionOk(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	data, mock, err := getMockData()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
-
-	defer db.Close()
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"Version()"}).
 		AddRow("test_version")
@@ -98,7 +101,7 @@ func TestGetServerVersionOk(t *testing.T) {
 
 	meta := metaData{}
 
-	assert.NoError(t, meta.updateServerVersion(db), "error was not expected while updating stats")
+	assert.NoError(t, meta.updateServerVersion(data), "error was not expected while updating stats")
 
 	// we make sure that all expectations were met
 	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
@@ -107,18 +110,14 @@ func TestGetServerVersionOk(t *testing.T) {
 }
 
 func TestCreateTableSQLOk(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	data, mock, err := getMockData()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
-	defer db.Close()
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
 
 	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(rows)
-
-	data := Data{
-		Connection: db,
-	}
 
 	table := data.createTable("Test_Table")
 
@@ -136,19 +135,15 @@ func TestCreateTableSQLOk(t *testing.T) {
 }
 
 func TestCreateTableRowValues(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	data, mock, err := getMockData()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
-	defer db.Close()
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"id", "email", "name"}).
 		AddRow(1, "test@test.de", "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2")
 
 	mock.ExpectQuery("^SELECT (.+) FROM `test`$").WillReturnRows(rows)
-
-	data := Data{
-		Connection: db,
-	}
 
 	table := data.createTable("test")
 
@@ -164,9 +159,9 @@ func TestCreateTableRowValues(t *testing.T) {
 }
 
 func TestCreateTableValuesSteam(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	data, mock, err := getMockData()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
-	defer db.Close()
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"id", "email", "name"}).
 		AddRow(1, "test@test.de", "Test Name 1").
@@ -174,10 +169,7 @@ func TestCreateTableValuesSteam(t *testing.T) {
 
 	mock.ExpectQuery("^SELECT (.+) FROM `test`$").WillReturnRows(rows)
 
-	data := Data{
-		Connection:       db,
-		MaxAllowedPacket: 4096,
-	}
+	data.MaxAllowedPacket = 4096
 
 	table := data.createTable("test")
 
@@ -189,9 +181,9 @@ func TestCreateTableValuesSteam(t *testing.T) {
 }
 
 func TestCreateTableValuesSteamSmallPackets(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	data, mock, err := getMockData()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
-	defer db.Close()
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"id", "email", "name"}).
 		AddRow(1, "test@test.de", "Test Name 1").
@@ -199,10 +191,7 @@ func TestCreateTableValuesSteamSmallPackets(t *testing.T) {
 
 	mock.ExpectQuery("^SELECT (.+) FROM `test`$").WillReturnRows(rows)
 
-	data := Data{
-		Connection:       db,
-		MaxAllowedPacket: 64,
-	}
+	data.MaxAllowedPacket = 64
 
 	table := data.createTable("test")
 
@@ -215,9 +204,9 @@ func TestCreateTableValuesSteamSmallPackets(t *testing.T) {
 }
 
 func TestCreateTableAllValuesWithNil(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	data, mock, err := getMockData()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
-	defer db.Close()
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"id", "email", "name"}).
 		AddRow(1, nil, "Test Name 1").
@@ -225,10 +214,6 @@ func TestCreateTableAllValuesWithNil(t *testing.T) {
 		AddRow(3, "", "Test Name 3")
 
 	mock.ExpectQuery("^SELECT (.+) FROM `test`$").WillReturnRows(rows)
-
-	data := Data{
-		Connection: db,
-	}
 
 	table := data.createTable("test")
 
@@ -248,10 +233,9 @@ func TestCreateTableAllValuesWithNil(t *testing.T) {
 }
 
 func TestCreateTableOk(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	data, mock, err := getMockData()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
-
-	defer db.Close()
+	defer data.Close()
 
 	createTableRows := sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
@@ -264,11 +248,8 @@ func TestCreateTableOk(t *testing.T) {
 	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
 
 	var buf bytes.Buffer
-	data := Data{
-		Connection:       db,
-		Out:              &buf,
-		MaxAllowedPacket: 4096,
-	}
+	data.Out = &buf
+	data.MaxAllowedPacket = 4096
 
 	assert.NoError(t, data.getTemplates())
 
@@ -305,10 +286,9 @@ UNLOCK TABLES;
 }
 
 func TestCreateTableOkSmallPackets(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	data, mock, err := getMockData()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
-
-	defer db.Close()
+	defer data.Close()
 
 	createTableRows := sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
@@ -321,11 +301,8 @@ func TestCreateTableOkSmallPackets(t *testing.T) {
 	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
 
 	var buf bytes.Buffer
-	data := Data{
-		Connection:       db,
-		Out:              &buf,
-		MaxAllowedPacket: 64,
-	}
+	data.Out = &buf
+	data.MaxAllowedPacket = 64
 
 	assert.NoError(t, data.getTemplates())
 

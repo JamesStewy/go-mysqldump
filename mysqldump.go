@@ -39,7 +39,6 @@ func Register(db *sql.DB, dir, format string) (*Data, error) {
 	return &Data{
 		Out:        f,
 		Connection: db,
-		LockTables: true,
 	}, nil
 }
 
@@ -48,7 +47,6 @@ func Dump(db *sql.DB, out io.Writer) error {
 	return (&Data{
 		Connection: db,
 		Out:        out,
-		LockTables: true,
 	}).Dump()
 }
 
