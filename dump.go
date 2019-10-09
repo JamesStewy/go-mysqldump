@@ -41,7 +41,6 @@ type table struct {
 
 	data   *Data
 	rows   *sql.Rows
-	types  []reflect.Type
 	values []interface{}
 }
 
@@ -53,7 +52,7 @@ type metaData struct {
 
 const (
 	// Version of this plugin for easy reference
-	Version = "0.5.0"
+	Version = "0.5.1"
 
 	defaultMaxAllowedPacket = 4194304
 )
@@ -302,7 +301,7 @@ func (table *table) CreateSQL() (string, error) {
 }
 
 func (table *table) Init() (err error) {
-	if len(table.types) != 0 {
+	if len(table.values) != 0 {
 		return errors.New("can't init twice")
 	}
 
@@ -324,22 +323,22 @@ func (table *table) Init() (err error) {
 		return err
 	}
 
-	table.types = make([]reflect.Type, len(tt))
+	var t reflect.Type
 	table.values = make([]interface{}, len(tt))
 	for i, tp := range tt {
 		st := tp.ScanType()
 		if tp.DatabaseTypeName() == "BLOB" {
-			table.types[i] = reflect.TypeOf(sql.RawBytes{})
+			t = reflect.TypeOf(sql.RawBytes{})
 		} else if st != nil && (st.Kind() == reflect.Int ||
 			st.Kind() == reflect.Int8 ||
 			st.Kind() == reflect.Int16 ||
 			st.Kind() == reflect.Int32 ||
 			st.Kind() == reflect.Int64) {
-			table.types[i] = reflect.TypeOf(sql.NullInt64{})
+			t = reflect.TypeOf(sql.NullInt64{})
 		} else {
-			table.types[i] = reflect.TypeOf(sql.NullString{})
+			t = reflect.TypeOf(sql.NullString{})
 		}
-		table.values[i] = reflect.New(table.types[i]).Interface()
+		table.values[i] = reflect.New(t).Interface()
 	}
 	return nil
 }
