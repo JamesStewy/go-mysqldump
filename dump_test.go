@@ -1,22 +1,35 @@
 package mysqldump
 
 import (
-	"io/ioutil"
-	"os"
+	"bytes"
+	"database/sql"
 	"reflect"
 	"strings"
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestGetTablesOk(t *testing.T) {
-	db, mock, err := sqlmock.New()
+func getMockData() (data *Data, mock sqlmock.Sqlmock, err error) {
+	var db *sql.DB
+	db, mock, err = sqlmock.New()
 	if err != nil {
-		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+		return
 	}
+	mock.ExpectBegin()
 
-	defer db.Close()
+	data = &Data{
+		Connection: db,
+	}
+	err = data.begin()
+	return
+}
+
+func TestGetTablesOk(t *testing.T) {
+	data, mock, err := getMockData()
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
 		AddRow("Test_Table_1").
@@ -24,30 +37,41 @@ func TestGetTablesOk(t *testing.T) {
 
 	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(rows)
 
-	result, err := getTables(db)
-	if err != nil {
-		t.Errorf("error was not expected while updating stats: %s", err)
-	}
+	result, err := data.getTables()
+	assert.NoError(t, err)
 
 	// we make sure that all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("there were unfulfilled expections: %s", err)
-	}
+	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
 
-	expectedResult := []string{"Test_Table_1", "Test_Table_2"}
+	assert.EqualValues(t, []string{"Test_Table_1", "Test_Table_2"}, result)
+}
 
-	if !reflect.DeepEqual(result, expectedResult) {
-		t.Fatalf("expected %#v, got %#v", result, expectedResult)
-	}
+func TestIgnoreTablesOk(t *testing.T) {
+	data, mock, err := getMockData()
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
+	defer data.Close()
+
+	rows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
+		AddRow("Test_Table_1").
+		AddRow("Test_Table_2")
+
+	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(rows)
+
+	data.IgnoreTables = []string{"Test_Table_1"}
+
+	result, err := data.getTables()
+	assert.NoError(t, err)
+
+	// we make sure that all expectations were met
+	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
+
+	assert.EqualValues(t, []string{"Test_Table_2"}, result)
 }
 
 func TestGetTablesNil(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
-	}
-
-	defer db.Close()
+	data, mock, err := getMockData()
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
 		AddRow("Test_Table_1").
@@ -56,76 +80,52 @@ func TestGetTablesNil(t *testing.T) {
 
 	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(rows)
 
-	result, err := getTables(db)
-	if err != nil {
-		t.Errorf("error was not expected while updating stats: %s", err)
-	}
+	result, err := data.getTables()
+	assert.NoError(t, err)
 
 	// we make sure that all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("there were unfulfilled expections: %s", err)
-	}
+	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
 
-	expectedResult := []string{"Test_Table_1", "", "Test_Table_3"}
-
-	if !reflect.DeepEqual(result, expectedResult) {
-		t.Fatalf("expected %#v, got %#v", expectedResult, result)
-	}
+	assert.EqualValues(t, []string{"Test_Table_1", "Test_Table_3"}, result)
 }
 
 func TestGetServerVersionOk(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
-	}
-
-	defer db.Close()
+	data, mock, err := getMockData()
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"Version()"}).
 		AddRow("test_version")
 
 	mock.ExpectQuery("^SELECT version()").WillReturnRows(rows)
 
-	result, err := getServerVersion(db)
-	if err != nil {
-		t.Errorf("error was not expected while updating stats: %s", err)
-	}
+	meta := metaData{}
+
+	assert.NoError(t, meta.updateServerVersion(data), "error was not expected while updating stats")
 
 	// we make sure that all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("there were unfulfilled expections: %s", err)
-	}
+	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
 
-	expectedResult := "test_version"
-
-	if !reflect.DeepEqual(result, expectedResult) {
-		t.Fatalf("expected %#v, got %#v", expectedResult, result)
-	}
+	assert.Equal(t, "test_version", meta.ServerVersion)
 }
 
 func TestCreateTableSQLOk(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
-	}
-
-	defer db.Close()
+	data, mock, err := getMockData()
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
 
-	mock.ExpectQuery("^SHOW CREATE TABLE Test_Table$").WillReturnRows(rows)
+	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(rows)
 
-	result, err := createTableSQL(db, "Test_Table")
+	table := data.createTable("Test_Table")
 
-	if err != nil {
-		t.Errorf("error was not expected while updating stats: %s", err)
-	}
+	result, err := table.CreateSQL()
+	assert.NoError(t, err)
 
 	// we make sure that all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("there were unfulfilled expections: %s", err)
-	}
+	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
 
 	expectedResult := "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1"
 
@@ -134,76 +134,108 @@ func TestCreateTableSQLOk(t *testing.T) {
 	}
 }
 
-func TestCreateTableValuesOk(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
-	}
-
-	defer db.Close()
+func TestCreateTableRowValues(t *testing.T) {
+	data, mock, err := getMockData()
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"id", "email", "name"}).
 		AddRow(1, "test@test.de", "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2")
 
-	mock.ExpectQuery("^SELECT (.+) FROM test$").WillReturnRows(rows)
+	mock.ExpectQuery("^SELECT (.+) FROM `test`$").WillReturnRows(rows)
 
-	result, err := createTableValues(db, "test")
-	if err != nil {
-		t.Errorf("error was not expected while updating stats: %s", err)
-	}
+	table := data.createTable("test")
+
+	assert.True(t, table.Next())
+
+	result := table.RowValues()
+	assert.NoError(t, table.Err)
 
 	// we make sure that all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("there were unfulfilled expections: %s", err)
-	}
+	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
 
-	expectedResult := "('1','test@test.de','Test Name 1'),('2','test2@test.de','Test Name 2')"
-
-	if !reflect.DeepEqual(result, expectedResult) {
-		t.Fatalf("expected %#v, got %#v", expectedResult, result)
-	}
+	assert.EqualValues(t, "('1','test@test.de','Test Name 1')", result)
 }
 
-func TestCreateTableValuesNil(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
-	}
+func TestCreateTableValuesSteam(t *testing.T) {
+	data, mock, err := getMockData()
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
+	defer data.Close()
 
-	defer db.Close()
+	rows := sqlmock.NewRows([]string{"id", "email", "name"}).
+		AddRow(1, "test@test.de", "Test Name 1").
+		AddRow(2, "test2@test.de", "Test Name 2")
+
+	mock.ExpectQuery("^SELECT (.+) FROM `test`$").WillReturnRows(rows)
+
+	data.MaxAllowedPacket = 4096
+
+	table := data.createTable("test")
+
+	s := table.Stream()
+	assert.EqualValues(t, "INSERT INTO `test` VALUES ('1','test@test.de','Test Name 1'),('2','test2@test.de','Test Name 2');", <-s)
+
+	// we make sure that all expectations were met
+	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
+}
+
+func TestCreateTableValuesSteamSmallPackets(t *testing.T) {
+	data, mock, err := getMockData()
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
+	defer data.Close()
+
+	rows := sqlmock.NewRows([]string{"id", "email", "name"}).
+		AddRow(1, "test@test.de", "Test Name 1").
+		AddRow(2, "test2@test.de", "Test Name 2")
+
+	mock.ExpectQuery("^SELECT (.+) FROM `test`$").WillReturnRows(rows)
+
+	data.MaxAllowedPacket = 64
+
+	table := data.createTable("test")
+
+	s := table.Stream()
+	assert.EqualValues(t, "INSERT INTO `test` VALUES ('1','test@test.de','Test Name 1');", <-s)
+	assert.EqualValues(t, "INSERT INTO `test` VALUES ('2','test2@test.de','Test Name 2');", <-s)
+
+	// we make sure that all expectations were met
+	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
+}
+
+func TestCreateTableAllValuesWithNil(t *testing.T) {
+	data, mock, err := getMockData()
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
+	defer data.Close()
 
 	rows := sqlmock.NewRows([]string{"id", "email", "name"}).
 		AddRow(1, nil, "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2").
 		AddRow(3, "", "Test Name 3")
 
-	mock.ExpectQuery("^SELECT (.+) FROM test$").WillReturnRows(rows)
+	mock.ExpectQuery("^SELECT (.+) FROM `test`$").WillReturnRows(rows)
 
-	result, err := createTableValues(db, "test")
-	if err != nil {
-		t.Errorf("error was not expected while updating stats: %s", err)
+	table := data.createTable("test")
+
+	results := make([]string, 0)
+	for table.Next() {
+		row := table.RowValues()
+		assert.NoError(t, table.Err)
+		results = append(results, row)
 	}
 
 	// we make sure that all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("there were unfulfilled expections: %s", err)
-	}
+	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
 
-	expectedResult := "('1',null,'Test Name 1'),('2','test2@test.de','Test Name 2'),('3','','Test Name 3')"
+	expectedResults := []string{"('1',NULL,'Test Name 1')", "('2','test2@test.de','Test Name 2')", "('3','','Test Name 3')"}
 
-	if !reflect.DeepEqual(result, expectedResult) {
-		t.Fatalf("expected %#v, got %#v", expectedResult, result)
-	}
+	assert.EqualValues(t, expectedResults, results)
 }
 
 func TestCreateTableOk(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
-	}
-
-	defer db.Close()
+	data, mock, err := getMockData()
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
+	defer data.Close()
 
 	createTableRows := sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
@@ -212,126 +244,97 @@ func TestCreateTableOk(t *testing.T) {
 		AddRow(1, nil, "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2")
 
-	mock.ExpectQuery("^SHOW CREATE TABLE Test_Table$").WillReturnRows(createTableRows)
-	mock.ExpectQuery("^SELECT (.+) FROM Test_Table$").WillReturnRows(createTableValueRows)
+	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(createTableRows)
+	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
 
-	result, err := createTable(db, "Test_Table")
-	if err != nil {
-		t.Errorf("error was not expected while updating stats: %s", err)
-	}
+	var buf bytes.Buffer
+	data.Out = &buf
+	data.MaxAllowedPacket = 4096
+
+	assert.NoError(t, data.getTemplates())
+
+	table := data.createTable("Test_Table")
+
+	data.writeTable(table)
 
 	// we make sure that all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("there were unfulfilled expections: %s", err)
-	}
+	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
 
-	expectedResult := &table{
-		Name:   "Test_Table",
-		SQL:    "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1",
-		Values: "('1',null,'Test Name 1'),('2','test2@test.de','Test Name 2')",
-	}
+	expectedResult := `
+--
+-- Table structure for table ~Test_Table~
+--
 
-	if !reflect.DeepEqual(result, expectedResult) {
-		t.Fatalf("expected %#v, got %#v", expectedResult, result)
-	}
+DROP TABLE IF EXISTS ~Test_Table~;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+ SET character_set_client = utf8mb4 ;
+CREATE TABLE 'Test_Table' (~id~ int(11) NOT NULL AUTO_INCREMENT,~s~ char(60) DEFAULT NULL, PRIMARY KEY (~id~))ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table ~Test_Table~
+--
+
+LOCK TABLES ~Test_Table~ WRITE;
+/*!40000 ALTER TABLE ~Test_Table~ DISABLE KEYS */;
+INSERT INTO ~Test_Table~ VALUES ('1',NULL,'Test Name 1'),('2','test2@test.de','Test Name 2');
+/*!40000 ALTER TABLE ~Test_Table~ ENABLE KEYS */;
+UNLOCK TABLES;
+`
+	result := strings.Replace(buf.String(), "`", "~", -1)
+	assert.Equal(t, expectedResult, result)
 }
 
-func TestDumpOk(t *testing.T) {
-
-	tmpFile := "/tmp/test_format.sql"
-	os.Remove(tmpFile)
-
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
-	}
-
-	defer db.Close()
-
-	showTablesRows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
-		AddRow("Test_Table")
-
-	serverVersionRows := sqlmock.NewRows([]string{"Version()"}).
-		AddRow("test_version")
+func TestCreateTableOkSmallPackets(t *testing.T) {
+	data, mock, err := getMockData()
+	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
+	defer data.Close()
 
 	createTableRows := sqlmock.NewRows([]string{"Table", "Create Table"}).
-		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`email` char(60) DEFAULT NULL, `name` char(60), PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
+		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
 
 	createTableValueRows := sqlmock.NewRows([]string{"id", "email", "name"}).
 		AddRow(1, nil, "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2")
 
-	mock.ExpectQuery("^SELECT version()").WillReturnRows(serverVersionRows)
-	mock.ExpectQuery("^SHOW TABLES$").WillReturnRows(showTablesRows)
-	mock.ExpectQuery("^SHOW CREATE TABLE Test_Table$").WillReturnRows(createTableRows)
-	mock.ExpectQuery("^SELECT (.+) FROM Test_Table$").WillReturnRows(createTableValueRows)
+	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(createTableRows)
+	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
 
-	dumper := &Dumper{
-		db:     db,
-		format: "test_format",
-		dir:    "/tmp/",
-	}
+	var buf bytes.Buffer
+	data.Out = &buf
+	data.MaxAllowedPacket = 64
 
-	path, err := dumper.Dump()
+	assert.NoError(t, data.getTemplates())
 
-	if path == "" {
-		t.Errorf("No empty path was expected while dumping the database")
-	}
+	table := data.createTable("Test_Table")
 
-	if err != nil {
-		t.Errorf("error was not expected while dumping the database: %s", err)
-	}
+	data.writeTable(table)
 
-	f, err := ioutil.ReadFile("/tmp/test_format.sql")
+	// we make sure that all expectations were met
+	assert.NoError(t, mock.ExpectationsWereMet(), "there were unfulfilled expections")
 
-	if err != nil {
-		t.Errorf("error was not expected while reading the file: %s", err)
-	}
-
-	result := strings.Replace(strings.Split(string(f), "-- Dump completed")[0], "`", "\\", -1)
-
-	expected := `-- Go SQL Dump ` + version + `
+	expectedResult := `
 --
--- ------------------------------------------------------
--- Server version	test_version
-
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8 */;
-/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
-/*!40103 SET TIME_ZONE='+00:00' */;
-/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
-/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
-/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
-/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
-
-
-
---
--- Table structure for table Test_Table
+-- Table structure for table ~Test_Table~
 --
 
-DROP TABLE IF EXISTS Test_Table;
+DROP TABLE IF EXISTS ~Test_Table~;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE 'Test_Table' (\id\ int(11) NOT NULL AUTO_INCREMENT,\email\ char(60) DEFAULT NULL, \name\ char(60), PRIMARY KEY (\id\))ENGINE=InnoDB DEFAULT CHARSET=latin1;
+ SET character_set_client = utf8mb4 ;
+CREATE TABLE 'Test_Table' (~id~ int(11) NOT NULL AUTO_INCREMENT,~s~ char(60) DEFAULT NULL, PRIMARY KEY (~id~))ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
 --
--- Dumping data for table Test_Table
+-- Dumping data for table ~Test_Table~
 --
 
-LOCK TABLES Test_Table WRITE;
-/*!40000 ALTER TABLE Test_Table DISABLE KEYS */;
-
-INSERT INTO Test_Table VALUES ('1',null,'Test Name 1'),('2','test2@test.de','Test Name 2');
-
-/*!40000 ALTER TABLE Test_Table ENABLE KEYS */;
+LOCK TABLES ~Test_Table~ WRITE;
+/*!40000 ALTER TABLE ~Test_Table~ DISABLE KEYS */;
+INSERT INTO ~Test_Table~ VALUES ('1',NULL,'Test Name 1');
+INSERT INTO ~Test_Table~ VALUES ('2','test2@test.de','Test Name 2');
+/*!40000 ALTER TABLE ~Test_Table~ ENABLE KEYS */;
 UNLOCK TABLES;
-
 `
-
-	if !reflect.DeepEqual(result, expected) {
-		t.Fatalf("expected %#v, got %#v", expected, result)
-	}
+	result := strings.Replace(buf.String(), "`", "~", -1)
+	assert.Equal(t, expectedResult, result)
 }
