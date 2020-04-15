@@ -8,6 +8,7 @@ package main
 import (
   "database/sql"
   "fmt"
+  "os"
 
   "github.com/jamf/go-mysqldump"
   "github.com/go-sql-driver/mysql"
@@ -43,7 +44,7 @@ func main() {
     fmt.Println("Error dumping:", err)
     return
   }
-  fmt.Printf("File is saved to %s", dumpFilenameFormat)
+  fmt.Printf("File is saved to %s\n", dumper.Out.(*os.File).Name())
 
   // Close dumper, connected database and file stream.
   dumper.Close()
