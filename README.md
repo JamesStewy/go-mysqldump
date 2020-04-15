@@ -28,7 +28,7 @@ func main() {
 
   db, err := sql.Open("mysql", config.FormatDSN())
   if err != nil {
-    fmt.Println("Error opening database: ", err)
+    fmt.Println("Error opening database:", err)
     return
   }
 
