@@ -23,8 +23,13 @@ func main() {
   config.Net = "tcp"
   config.Addr = "your-hostname:your-port"
 
-  dumpDir := "dumps"  // you should create this directory
+  dumpDir := "dumps"
   dumpFilenameFormat := fmt.Sprintf("%s-20060102T150405", config.DBName)   // accepts time layout string and add .sql at the end of file
+
+  if err := os.MkdirAll(dumpDir, 0755); err != nil {
+    fmt.Println("Error mkdir:", err)
+    return
+  }
 
   db, err := sql.Open("mysql", config.FormatDSN())
   if err != nil {
