@@ -39,8 +39,7 @@ func main() {
   }
 
   // Dump database to file
-  err := dumper.Dump()
-  if err != nil {
+  if err := dumper.Dump(); err != nil {
     fmt.Println("Error dumping:", err)
     return
   }
