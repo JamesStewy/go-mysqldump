@@ -49,7 +49,11 @@ func main() {
     fmt.Println("Error dumping:", err)
     return
   }
-  fmt.Printf("File is saved to %s\n", dumper.Out.(*os.File).Name())
+  if file, ok := dumper.Out.(*os.File); ok {
+    fmt.Println("File is saved to", file.Name())
+  } else {
+    fmt.Println("It's not part of *os.File, but dump is done")
+  }
 
   // Close dumper, connected database and file stream.
   dumper.Close()
