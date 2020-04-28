@@ -2,7 +2,8 @@
 Create MYSQL dumps in Go without the `mysqldump` CLI as a dependancy.
 
 ### Simple Example
-`package main
+```go
+package main
 
 import (
 	"database/sql"
@@ -56,7 +57,7 @@ func main() {
 
 	// Close dumper, connected database and file stream.
 	dumper.Close()
-}``go
+}
 ```
 
 [![GoDoc](https://godoc.org/github.com/jamf/go-mysqldump?status.svg)](https://godoc.org/github.com/jamf/go-mysqldump)
