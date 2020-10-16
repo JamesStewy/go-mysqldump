@@ -23,7 +23,7 @@ type dump struct {
 	CompleteTime  string
 }
 
-const version = "0.2.2"
+const version = "0.2.3"
 
 const tmpl = `-- Go SQL Dump {{ .DumpVersion }}
 --
@@ -69,8 +69,9 @@ UNLOCK TABLES;
 
 // Creates a MYSQL Dump based on the options supplied through the dumper.
 func (d *Dumper) Dump() (string, error) {
-	name := time.Now().Format(d.format)
-	p := path.Join(d.dir, name+".sql")
+	format := time.Now().Format(d.format)
+	name := d.prefix + "-" + format + ".sql"
+	p := path.Join(d.dir, name)
 
 	// Check dump directory
 	if e, _ := exists(p); e {
