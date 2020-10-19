@@ -236,7 +236,7 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 		data_text = append(data_text, "("+strings.Join(dataStrings, ",")+")")
 	}
 
-	return strings.Join(data_text, ","), rows.Err()j
+	return strings.Join(data_text, ","), rows.Err()
 }
 
 func escapeString(str string) string {
