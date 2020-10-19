@@ -23,7 +23,7 @@ type dump struct {
 	CompleteTime  string
 }
 
-const version = "0.2.3"
+const version = "0.2.5"
 
 const tmpl = `-- Go SQL Dump {{ .DumpVersion }}
 --
@@ -227,7 +227,7 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 
 		for key, value := range data {
 			if value != nil && value.Valid {
-				dataStrings[key] = "'" + value.String + "'"
+				dataStrings[key] = "'" + escapeString(value.String) + "'"
 			} else {
 				dataStrings[key] = "null"
 			}
@@ -236,5 +236,26 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 		data_text = append(data_text, "("+strings.Join(dataStrings, ",")+")")
 	}
 
-	return strings.Join(data_text, ","), rows.Err()
+	return strings.Join(data_text, ","), rows.Err()j
+}
+
+func escapeString(str string) string {
+	replace := map[string]string{
+		`\`: `\\`,
+	}
+
+	for b, a := range replace {
+		str = strings.Replace(str, b, a, -1)
+	}
+
+	replace = map[string]string{
+		"'": `\'`,
+		`"`: `\"`,
+	}
+
+	for b, a := range replace {
+		str = strings.Replace(str, b, a, -1)
+	}
+
+	return str
 }
