@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -226,7 +227,7 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 
 		for key, value := range data {
 			if value != nil && value.Valid {
-				dataStrings[key] = "'" + value.String + "'"
+				dataStrings[key] = "'" + valueReplace(value.String) + "'"
 			} else {
 				dataStrings[key] = "null"
 			}
@@ -236,4 +237,9 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 	}
 
 	return strings.Join(data_text, ","), rows.Err()
+}
+
+func valueReplace(value string) string {
+	re := regexp.MustCompile(`["']`)
+	return re.ReplaceAllString(value, "\\${0}${1}")
 }
