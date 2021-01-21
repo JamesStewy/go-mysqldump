@@ -305,17 +305,32 @@ func (table *table) Init() (err error) {
 		return errors.New("can't init twice")
 	}
 
-	table.rows, err = table.data.tx.Query("SELECT * FROM " + table.NameEsc())
+	var columns []string
+
+	colInfo, err := table.data.tx.Query("SHOW FIELDS FROM " + table.NameEsc())
 	if err != nil {
 		return err
 	}
 
-	columns, err := table.rows.Columns()
-	if err != nil {
-		return err
+	for colInfo.Next() {
+		var field, t, null, key, def, extra string
+		colInfo.Scan(&field, &t, &null, &key, &def, &extra)
+		if field == "cert_blob_lookup_hash" {
+			fmt.Println("this is a thing")
+		}
+
+		columns = append(columns, field)
 	}
+
 	if len(columns) == 0 {
 		return errors.New("No columns in table " + table.Name + ".")
+	}
+
+	// Total query plus sanitization
+
+	table.rows, err = table.data.tx.Query("SELECT * FROM " + table.NameEsc())
+	if err != nil {
+		return err
 	}
 
 	tt, err := table.rows.ColumnTypes()
@@ -328,11 +343,6 @@ func (table *table) Init() (err error) {
 	for i, tp := range tt {
 		st := tp.ScanType()
 		dt := tp.DatabaseTypeName()
-
-		// SHOW FIELDS FROM jamfsoftware.computer_installed_certificates;
-		// if tp.Name() == "cert_blob_lookup_hash" {
-		// 	fmt.Println("why though =", st, ":", dt)
-		// }
 
 		if dt == "BLOB" || dt == "BINARY" {
 			t = reflect.TypeOf(sql.RawBytes{})
