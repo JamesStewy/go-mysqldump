@@ -327,15 +327,30 @@ func (table *table) Init() (err error) {
 	table.values = make([]interface{}, len(tt))
 	for i, tp := range tt {
 		st := tp.ScanType()
-		if tp.DatabaseTypeName() == "BLOB" {
+		dt := tp.DatabaseTypeName()
+
+		// SHOW FIELDS FROM jamfsoftware.computer_installed_certificates;
+		// if tp.Name() == "cert_blob_lookup_hash" {
+		// 	fmt.Println("why though =", st, ":", dt)
+		// }
+
+		if dt == "BLOB" || dt == "BINARY" {
 			t = reflect.TypeOf(sql.RawBytes{})
-		} else if st != nil && (st.Kind() == reflect.Int ||
+		} else if dt == "VARCHAR" || dt == "TEXT" || dt == "DECIMAL" {
+			t = reflect.TypeOf(sql.NullString{})
+		} else if (st != nil && (st.Kind() == reflect.Int ||
 			st.Kind() == reflect.Int8 ||
 			st.Kind() == reflect.Int16 ||
 			st.Kind() == reflect.Int32 ||
-			st.Kind() == reflect.Int64) {
+			st.Kind() == reflect.Int64)) ||
+			dt == "BIGINT" || dt == "TINYINT" || dt == "INT" {
 			t = reflect.TypeOf(sql.NullInt64{})
+		} else if (st != nil && (st.Kind() == reflect.Float32 ||
+			st.Kind() == reflect.Float64)) ||
+			tp.DatabaseTypeName() == "DOUBLE" {
+			t = reflect.TypeOf(sql.NullFloat64{})
 		} else {
+			// unknown datatype
 			t = reflect.TypeOf(sql.NullString{})
 		}
 		table.values[i] = reflect.New(t).Interface()
