@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
 	"text/template"
 	"time"
 )
@@ -307,19 +308,34 @@ func (table *table) Init() (err error) {
 
 	var columns []string
 
-	colInfo, err := table.data.tx.Query("SHOW FIELDS FROM " + table.NameEsc())
+	colInfo, err := table.data.tx.Query("SHOW COLUMNS FROM " + table.NameEsc())
 	if err != nil {
 		return err
 	}
 
 	for colInfo.Next() {
-		var field, t, null, key, def, extra string
-		colInfo.Scan(&field, &t, &null, &key, &def, &extra)
-		if field == "cert_blob_lookup_hash" {
+		cols, err := colInfo.Columns()
+		if err != nil {
+			return err
+		}
+
+		info := make([]sql.NullString, len(cols))
+		scans := make([]interface{}, len(cols))
+		for i := range info {
+			scans[i] = &info[i]
+		}
+
+		if err := colInfo.Scan(scans...); err != nil {
+			return err
+		}
+
+		// ignore all extras with VIRTUAL
+
+		if info[0].String == "cert_blob_lookup_hash" {
 			fmt.Println("this is a thing")
 		}
 
-		columns = append(columns, field)
+		columns = append(columns, "`"+info[0].String+"`")
 	}
 
 	if len(columns) == 0 {
@@ -328,7 +344,7 @@ func (table *table) Init() (err error) {
 
 	// Total query plus sanitization
 
-	table.rows, err = table.data.tx.Query("SELECT * FROM " + table.NameEsc())
+	table.rows, err = table.data.tx.Query("SELECT " + strings.Join(columns, ",") + " FROM " + table.NameEsc())
 	if err != nil {
 		return err
 	}
@@ -338,9 +354,9 @@ func (table *table) Init() (err error) {
 		return err
 	}
 
-	var t reflect.Type
 	table.values = make([]interface{}, len(tt))
 	for i, tp := range tt {
+		var t reflect.Type
 		st := tp.ScanType()
 		dt := tp.DatabaseTypeName()
 
