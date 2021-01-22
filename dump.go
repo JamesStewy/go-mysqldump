@@ -381,32 +381,40 @@ func (table *table) Init() error {
 
 	table.values = make([]interface{}, len(tt))
 	for i, tp := range tt {
-		var t reflect.Type
-		st := tp.ScanType()
-		dt := tp.DatabaseTypeName()
+		table.values[i] = reflect.New(reflectColumnType(tp)).Interface()
+	}
+	return nil
+}
 
-		if dt == "BLOB" || dt == "BINARY" {
-			t = reflect.TypeOf(sql.RawBytes{})
-		} else if dt == "VARCHAR" || dt == "TEXT" || dt == "DECIMAL" {
-			t = reflect.TypeOf(sql.NullString{})
-		} else if (st != nil && (st.Kind() == reflect.Int ||
+func reflectColumnType(tp *sql.ColumnType) reflect.Type {
+	// reflect for scanable
+	if st := tp.ScanType(); st != nil {
+		if st.Kind() == reflect.Int ||
 			st.Kind() == reflect.Int8 ||
 			st.Kind() == reflect.Int16 ||
 			st.Kind() == reflect.Int32 ||
-			st.Kind() == reflect.Int64)) ||
-			dt == "BIGINT" || dt == "TINYINT" || dt == "INT" {
-			t = reflect.TypeOf(sql.NullInt64{})
-		} else if (st != nil && (st.Kind() == reflect.Float32 ||
-			st.Kind() == reflect.Float64)) ||
-			tp.DatabaseTypeName() == "DOUBLE" {
-			t = reflect.TypeOf(sql.NullFloat64{})
-		} else {
-			// unknown datatype
-			t = reflect.TypeOf(sql.NullString{})
+			st.Kind() == reflect.Int64 {
+			return reflect.TypeOf(sql.NullInt64{})
+		} else if st.Kind() == reflect.Float32 ||
+			st.Kind() == reflect.Float64 {
+			return reflect.TypeOf(sql.NullFloat64{})
 		}
-		table.values[i] = reflect.New(t).Interface()
 	}
-	return nil
+
+	// determine by name
+	switch tp.DatabaseTypeName() {
+	case "BLOB", "BINARY":
+		return reflect.TypeOf(sql.RawBytes{})
+	case "VARCHAR", "TEXT", "DECIMAL":
+		return reflect.TypeOf(sql.NullString{})
+	case "BIGINT", "TINYINT", "INT":
+		return reflect.TypeOf(sql.NullInt64{})
+	case "DOUBLE":
+		return reflect.TypeOf(sql.NullFloat64{})
+	}
+
+	// unknown datatype
+	return reflect.TypeOf(sql.NullString{})
 }
 
 func (table *table) Next() bool {
@@ -460,6 +468,12 @@ func (table *table) RowBuffer() *bytes.Buffer {
 			} else {
 				b.WriteString(nullType)
 			}
+		case *sql.NullFloat64:
+			if s.Valid {
+				fmt.Fprintf(&b, "%f", s.Float64)
+			} else {
+				b.WriteString(nullType)
+			}
 		case *sql.RawBytes:
 			if len(*s) == 0 {
 				b.WriteString(nullType)
@@ -491,7 +505,7 @@ func (table *table) Stream() <-chan string {
 			}
 
 			if insert.Len() == 0 {
-				fmt.Fprintf(&insert, "INSERT INTO %s (%s) VALUES ", table.NameEsc(), table.columnsList())
+				fmt.Fprint(&insert, "INSERT INTO ", table.NameEsc(), " (", table.columnsList(), ") VALUES ")
 			} else {
 				insert.WriteString(",")
 			}
