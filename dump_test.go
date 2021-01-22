@@ -253,8 +253,6 @@ func TestCreateTableAllValuesWithNil(t *testing.T) {
 	assert.EqualValues(t, expectedResults, results)
 }
 
-// TODO the last two
-
 func TestCreateTableOk(t *testing.T) {
 	data, mock, err := getMockData()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
@@ -263,11 +261,17 @@ func TestCreateTableOk(t *testing.T) {
 	createTableRows := sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
 
-	createTableValueRows := sqlmock.NewRows([]string{"id", "email", "name"}).
+	createTableValueCols := sqlmock.NewRows([]string{"Field", "Extra"}).
+		AddRow("id", "").
+		AddRow("email", "").
+		AddRow("name", "")
+
+	createTableValueRows := sqlmock.NewRowsWithColumnDefinition(c("id", 0), c("email", ""), c("name", "")).
 		AddRow(1, nil, "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2")
 
 	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(createTableRows)
+	mock.ExpectQuery("^SHOW COLUMNS FROM `Test_Table`$").WillReturnRows(createTableValueCols)
 	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
 
 	var buf bytes.Buffer
@@ -300,7 +304,7 @@ CREATE TABLE 'Test_Table' (~id~ int(11) NOT NULL AUTO_INCREMENT,~s~ char(60) DEF
 
 LOCK TABLES ~Test_Table~ WRITE;
 /*!40000 ALTER TABLE ~Test_Table~ DISABLE KEYS */;
-INSERT INTO ~Test_Table~ VALUES ('1',NULL,'Test Name 1'),('2','test2@test.de','Test Name 2');
+INSERT INTO ~Test_Table~ (~id~, ~email~, ~name~) VALUES (1,NULL,'Test Name 1'),(2,'test2@test.de','Test Name 2');
 /*!40000 ALTER TABLE ~Test_Table~ ENABLE KEYS */;
 UNLOCK TABLES;
 `
@@ -316,11 +320,17 @@ func TestCreateTableOkSmallPackets(t *testing.T) {
 	createTableRows := sqlmock.NewRows([]string{"Table", "Create Table"}).
 		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
 
-	createTableValueRows := sqlmock.NewRows([]string{"id", "email", "name"}).
+	createTableValueCols := sqlmock.NewRows([]string{"Field", "Extra"}).
+		AddRow("id", "").
+		AddRow("email", "").
+		AddRow("name", "")
+
+	createTableValueRows := sqlmock.NewRowsWithColumnDefinition(c("id", 0), c("email", ""), c("name", "")).
 		AddRow(1, nil, "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2")
 
 	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(createTableRows)
+	mock.ExpectQuery("^SHOW COLUMNS FROM `Test_Table`$").WillReturnRows(createTableValueCols)
 	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
 
 	var buf bytes.Buffer
@@ -353,8 +363,8 @@ CREATE TABLE 'Test_Table' (~id~ int(11) NOT NULL AUTO_INCREMENT,~s~ char(60) DEF
 
 LOCK TABLES ~Test_Table~ WRITE;
 /*!40000 ALTER TABLE ~Test_Table~ DISABLE KEYS */;
-INSERT INTO ~Test_Table~ VALUES ('1',NULL,'Test Name 1');
-INSERT INTO ~Test_Table~ VALUES ('2','test2@test.de','Test Name 2');
+INSERT INTO ~Test_Table~ (~id~, ~email~, ~name~) VALUES (1,NULL,'Test Name 1');
+INSERT INTO ~Test_Table~ (~id~, ~email~, ~name~) VALUES (2,'test2@test.de','Test Name 2');
 /*!40000 ALTER TABLE ~Test_Table~ ENABLE KEYS */;
 UNLOCK TABLES;
 `
