@@ -1,4 +1,4 @@
-package mysqldump
+package mysqldump_test
 
 import (
 	"bytes"
@@ -8,10 +8,11 @@ import (
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/jamf/go-mysqldump"
 	"github.com/stretchr/testify/assert"
 )
 
-const expected = `-- Go SQL Dump ` + Version + `
+const expected = `-- Go SQL Dump ` + mysqldump.Version + `
 --
 -- ------------------------------------------------------
 -- Server version	test_version
@@ -86,7 +87,7 @@ func c(name string, v interface{}) *sqlmock.Column {
 	return sqlmock.NewColumn(name).OfType(t, v).Nullable(true)
 }
 
-func RunDump(t testing.TB, data *Data) {
+func RunDump(t testing.TB, data *mysqldump.Data) {
 	db, mock, err := sqlmock.New()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
 	defer db.Close()
@@ -122,7 +123,7 @@ func RunDump(t testing.TB, data *Data) {
 func TestDumpOk(t *testing.T) {
 	var buf bytes.Buffer
 
-	RunDump(t, &Data{
+	RunDump(t, &mysqldump.Data{
 		Out:        &buf,
 		LockTables: true,
 	})
@@ -135,7 +136,7 @@ func TestDumpOk(t *testing.T) {
 func TestNoLockOk(t *testing.T) {
 	var buf bytes.Buffer
 
-	data := &Data{
+	data := &mysqldump.Data{
 		Out:        &buf,
 		LockTables: false,
 	}
@@ -176,7 +177,7 @@ func TestNoLockOk(t *testing.T) {
 }
 
 func BenchmarkDump(b *testing.B) {
-	data := &Data{
+	data := &mysqldump.Data{
 		Out:        ioutil.Discard,
 		LockTables: true,
 	}
