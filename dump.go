@@ -343,6 +343,7 @@ func (table *table) initColumnData() error {
 			return err
 		}
 
+		// Ignore the virtual columns
 		if !info[extraIndex].Valid || !strings.Contains(info[extraIndex].String, "VIRTUAL") {
 			result = append(result, info[fieldIndex].String)
 		}
