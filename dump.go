@@ -307,22 +307,21 @@ func (table *table) initColumnData() error {
 	if err != nil {
 		return err
 	}
+	defer colInfo.Close()
+
+	cols, err := colInfo.Columns()
+	if err != nil {
+		return err
+	}
+
+	info := make([]sql.NullString, len(cols))
+	scans := make([]interface{}, len(cols))
+	for i := range info {
+		scans[i] = &info[i]
+	}
 
 	var result []string
-
 	for colInfo.Next() {
-		cols, err := colInfo.Columns()
-		if err != nil {
-			return err
-		}
-
-		// Allocate and link space to scan to this must be done every iteration
-		info := make([]sql.NullString, len(cols))
-		scans := make([]interface{}, len(cols))
-		for i := range info {
-			scans[i] = &info[i]
-		}
-
 		// Read into the pointers to the info marker
 		if err := colInfo.Scan(scans...); err != nil {
 			return err
