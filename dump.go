@@ -328,11 +328,11 @@ func (table *table) initColumnData() error {
 		case "Extra", "extra":
 			extraIndex = i
 		}
-		if fieldIndex > 0 && extraIndex > 0 {
+		if fieldIndex >= 0 && extraIndex >= 0 {
 			break
 		}
 	}
-	if fieldIndex <= 0 || extraIndex <= 0 {
+	if fieldIndex < 0 || extraIndex < 0 {
 		return errors.New("database column information is malformed")
 	}
 

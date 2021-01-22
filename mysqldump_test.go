@@ -42,7 +42,7 @@ CREATE TABLE 'Test_Table' (~id~ int(11) NOT NULL AUTO_INCREMENT,~email~ char(60)
 
 LOCK TABLES ~Test_Table~ WRITE;
 /*!40000 ALTER TABLE ~Test_Table~ DISABLE KEYS */;
-INSERT INTO ~Test_Table~ VALUES ('1',NULL,'Test Name 1'),('2','test2@test.de','Test Name 2');
+INSERT INTO ~Test_Table~ (~id~, ~email~, ~name~) VALUES ('1',NULL,'Test Name 1'),('2','test2@test.de','Test Name 2');
 /*!40000 ALTER TABLE ~Test_Table~ ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -66,6 +66,12 @@ func RunDump(t testing.TB, data *Data) {
 	showTablesRows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
 		AddRow("Test_Table")
 
+	showColumnsRows := sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+		AddRow("id", "int(11)", false, "", 0, "").
+		AddRow("email", "varchar(255)", true, "", nil, "").
+		AddRow("name", "varchar(255)", true, "", nil, "").
+		AddRow("hash", "varchar(255)", true, "", nil, "VIRTUAL GENERATED")
+
 	serverVersionRows := sqlmock.NewRows([]string{"Version()"}).
 		AddRow("test_version")
 
@@ -81,6 +87,7 @@ func RunDump(t testing.TB, data *Data) {
 	mock.ExpectQuery(`^SHOW TABLES$`).WillReturnRows(showTablesRows)
 	mock.ExpectExec("^LOCK TABLES `Test_Table` READ /\\*!32311 LOCAL \\*/$").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(createTableRows)
+	mock.ExpectQuery("^SHOW COLUMNS FROM `Test_Table`$").WillReturnRows(showColumnsRows)
 	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
 	mock.ExpectRollback()
 
@@ -116,6 +123,11 @@ func TestNoLockOk(t *testing.T) {
 	showTablesRows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
 		AddRow("Test_Table")
 
+	showColumnsRows := sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
+		AddRow("id", "int(11)", false, "", 0, "").
+		AddRow("email", "varchar(255)", true, "", nil, "").
+		AddRow("name", "varchar(255)", true, "", nil, "")
+
 	serverVersionRows := sqlmock.NewRows([]string{"Version()"}).
 		AddRow("test_version")
 
@@ -130,6 +142,7 @@ func TestNoLockOk(t *testing.T) {
 	mock.ExpectQuery(`^SELECT version\(\)$`).WillReturnRows(serverVersionRows)
 	mock.ExpectQuery(`^SHOW TABLES$`).WillReturnRows(showTablesRows)
 	mock.ExpectQuery("^SHOW CREATE TABLE `Test_Table`$").WillReturnRows(createTableRows)
+	mock.ExpectQuery("^SHOW COLUMNS FROM `Test_Table`$").WillReturnRows(showColumnsRows)
 	mock.ExpectQuery("^SELECT (.+) FROM `Test_Table`$").WillReturnRows(createTableValueRows)
 	mock.ExpectRollback()
 
