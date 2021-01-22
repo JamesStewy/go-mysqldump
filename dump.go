@@ -332,7 +332,7 @@ func (table *table) initColumnData() error {
 			break
 		}
 	}
-	if fieldIndex <= 0 || extraIndex < 0 {
+	if fieldIndex <= 0 || extraIndex <= 0 {
 		return errors.New("database column information is malformed")
 	}
 
