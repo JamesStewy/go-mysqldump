@@ -3,6 +3,7 @@ package mysqldump
 import (
 	"bytes"
 	"io/ioutil"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -42,7 +43,7 @@ CREATE TABLE 'Test_Table' (~id~ int(11) NOT NULL AUTO_INCREMENT,~email~ char(60)
 
 LOCK TABLES ~Test_Table~ WRITE;
 /*!40000 ALTER TABLE ~Test_Table~ DISABLE KEYS */;
-INSERT INTO ~Test_Table~ (~id~, ~email~, ~name~) VALUES ('1',NULL,'Test Name 1'),('2','test2@test.de','Test Name 2');
+INSERT INTO ~Test_Table~ (~id~, ~email~, ~name~) VALUES (1,NULL,'Test Name 1'),(2,'test2@test.de','Test Name 2');
 /*!40000 ALTER TABLE ~Test_Table~ ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -57,28 +58,52 @@ UNLOCK TABLES;
 
 `
 
+func mockColumnRows() *sqlmock.Rows {
+	var enum struct{}
+	col1 := sqlmock.NewColumn("Field").OfType("VARCHAR", "").Nullable(true)
+	col2 := sqlmock.NewColumn("Type").OfType("TEXT", "").Nullable(true)
+	col3 := sqlmock.NewColumn("Null").OfType("VARCHAR", "").Nullable(true)
+	col4 := sqlmock.NewColumn("Key").OfType("ENUM", &enum).Nullable(true)
+	col5 := sqlmock.NewColumn("Default").OfType("TEXT", "").Nullable(true)
+	col6 := sqlmock.NewColumn("Extra").OfType("VARCHAR", "").Nullable(true)
+	return sqlmock.NewRowsWithColumnDefinition(col1, col2, col3, col4, col5, col6).
+		AddRow("id", "int(11)", false, nil, 0, "").
+		AddRow("email", "varchar(255)", true, nil, nil, "").
+		AddRow("name", "varchar(255)", true, nil, nil, "").
+		AddRow("hash", "varchar(255)", true, nil, nil, "VIRTUAL GENERATED")
+}
+
+func c(name string, v interface{}) *sqlmock.Column {
+	var t string
+	switch reflect.ValueOf(v).Kind() {
+	case reflect.String:
+		t = "VARCHAR"
+	case reflect.Int:
+		t = "INT"
+	case reflect.Bool:
+		t = "BOOL"
+	}
+	return sqlmock.NewColumn(name).OfType(t, v).Nullable(true)
+}
+
 func RunDump(t testing.TB, data *Data) {
 	db, mock, err := sqlmock.New()
 	assert.NoError(t, err, "an error was not expected when opening a stub database connection")
 	defer db.Close()
 
 	data.Connection = db
-	showTablesRows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
+	showTablesRows := sqlmock.NewRowsWithColumnDefinition(c("Tables_in_Testdb", "")).
 		AddRow("Test_Table")
 
-	showColumnsRows := sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
-		AddRow("id", "int(11)", false, "", 0, "").
-		AddRow("email", "varchar(255)", true, "", nil, "").
-		AddRow("name", "varchar(255)", true, "", nil, "").
-		AddRow("hash", "varchar(255)", true, "", nil, "VIRTUAL GENERATED")
+	showColumnsRows := mockColumnRows()
 
-	serverVersionRows := sqlmock.NewRows([]string{"Version()"}).
+	serverVersionRows := sqlmock.NewRowsWithColumnDefinition(c("Version()", "")).
 		AddRow("test_version")
 
-	createTableRows := sqlmock.NewRows([]string{"Table", "Create Table"}).
+	createTableRows := sqlmock.NewRowsWithColumnDefinition(c("Table", ""), c("Create Table", "")).
 		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`email` char(60) DEFAULT NULL, `name` char(60), PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
 
-	createTableValueRows := sqlmock.NewRows([]string{"id", "email", "name"}).
+	createTableValueRows := sqlmock.NewRowsWithColumnDefinition(c("id", 0), c("email", ""), c("name", "")).
 		AddRow(1, nil, "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2")
 
@@ -120,21 +145,18 @@ func TestNoLockOk(t *testing.T) {
 	defer db.Close()
 
 	data.Connection = db
-	showTablesRows := sqlmock.NewRows([]string{"Tables_in_Testdb"}).
+	showTablesRows := sqlmock.NewRowsWithColumnDefinition(c("Tables_in_Testdb", "")).
 		AddRow("Test_Table")
 
-	showColumnsRows := sqlmock.NewRows([]string{"Field", "Type", "Null", "Key", "Default", "Extra"}).
-		AddRow("id", "int(11)", false, "", 0, "").
-		AddRow("email", "varchar(255)", true, "", nil, "").
-		AddRow("name", "varchar(255)", true, "", nil, "")
+	showColumnsRows := mockColumnRows()
 
-	serverVersionRows := sqlmock.NewRows([]string{"Version()"}).
+	serverVersionRows := sqlmock.NewRowsWithColumnDefinition(c("Version()", "")).
 		AddRow("test_version")
 
-	createTableRows := sqlmock.NewRows([]string{"Table", "Create Table"}).
+	createTableRows := sqlmock.NewRowsWithColumnDefinition(c("Table", ""), c("Create Table", "")).
 		AddRow("Test_Table", "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`email` char(60) DEFAULT NULL, `name` char(60), PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1")
 
-	createTableValueRows := sqlmock.NewRows([]string{"id", "email", "name"}).
+	createTableValueRows := sqlmock.NewRowsWithColumnDefinition(c("id", 0), c("email", ""), c("name", "")).
 		AddRow(1, nil, "Test Name 1").
 		AddRow(2, "test2@test.de", "Test Name 2")
 

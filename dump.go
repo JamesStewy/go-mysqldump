@@ -390,17 +390,13 @@ func (table *table) Init() error {
 
 func reflectColumnType(tp *sql.ColumnType) reflect.Type {
 	// reflect for scanable
-	if st := tp.ScanType(); st != nil {
-		if st.Kind() == reflect.Int ||
-			st.Kind() == reflect.Int8 ||
-			st.Kind() == reflect.Int16 ||
-			st.Kind() == reflect.Int32 ||
-			st.Kind() == reflect.Int64 {
-			return reflect.TypeOf(sql.NullInt64{})
-		} else if st.Kind() == reflect.Float32 ||
-			st.Kind() == reflect.Float64 {
-			return reflect.TypeOf(sql.NullFloat64{})
-		}
+	switch tp.ScanType().Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return reflect.TypeOf(sql.NullInt64{})
+	case reflect.Float32, reflect.Float64:
+		return reflect.TypeOf(sql.NullFloat64{})
+	case reflect.String:
+		return reflect.TypeOf(sql.NullString{})
 	}
 
 	// determine by name
@@ -416,7 +412,7 @@ func reflectColumnType(tp *sql.ColumnType) reflect.Type {
 	}
 
 	// unknown datatype
-	return reflect.TypeOf(sql.NullString{})
+	return tp.ScanType()
 }
 
 func (table *table) Next() bool {
