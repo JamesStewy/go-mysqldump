@@ -40,6 +40,7 @@ type table struct {
 	Name string
 	Err  error
 
+	cols   []string
 	data   *Data
 	rows   *sql.Rows
 	values []interface{}
@@ -219,7 +220,7 @@ func (data *Data) writeTable(table *table) error {
 
 // MARK: get methods
 
-// getTemplates initilaizes the templates on data from the constants in this file
+// getTemplates initializes the templates on data from the constants in this file
 func (data *Data) getTemplates() (err error) {
 	data.headerTmpl, err = template.New("mysqldumpHeader").Parse(headerTmpl)
 	if err != nil {
@@ -301,10 +302,10 @@ func (table *table) CreateSQL() (string, error) {
 	return tableSQL.String, nil
 }
 
-func (table *table) getColumnsToDump() ([]string, error) {
+func (table *table) initColumnData() error {
 	colInfo, err := table.data.tx.Query("SHOW COLUMNS FROM " + table.NameEsc())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	var result []string
@@ -312,7 +313,7 @@ func (table *table) getColumnsToDump() ([]string, error) {
 	for colInfo.Next() {
 		cols, err := colInfo.Columns()
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		// Allocate and link space to scan to this must be done every iteration
@@ -324,7 +325,7 @@ func (table *table) getColumnsToDump() ([]string, error) {
 
 		// Read into the pointers to the info marker
 		if err := colInfo.Scan(scans...); err != nil {
-			return nil, err
+			return err
 		}
 
 		// Find the the fields we care about
@@ -342,10 +343,15 @@ func (table *table) getColumnsToDump() ([]string, error) {
 		}
 
 		if !extra.Valid || !strings.Contains(extra.String, "VIRTUAL") {
-			result = append(result, "`"+field.String+"`")
+			result = append(result, field.String)
 		}
 	}
-	return result, nil
+	table.cols = result
+	return nil
+}
+
+func (table *table) columnsList() string {
+	return "`" + strings.Join(table.cols, "`, `") + "`"
 }
 
 func (table *table) Init() error {
@@ -353,17 +359,17 @@ func (table *table) Init() error {
 		return errors.New("can't init twice")
 	}
 
-	columns, err := table.getColumnsToDump()
-	if err != nil {
+	if err := table.initColumnData(); err != nil {
 		return err
 	}
 
-	if len(columns) == 0 {
+	if len(table.cols) == 0 {
 		// No data to dump since this is a virtual table
 		return nil
 	}
 
-	table.rows, err = table.data.tx.Query("SELECT " + strings.Join(columns, ",") + " FROM " + table.NameEsc())
+	var err error
+	table.rows, err = table.data.tx.Query("SELECT " + table.columnsList() + " FROM " + table.NameEsc())
 	if err != nil {
 		return err
 	}
@@ -485,7 +491,7 @@ func (table *table) Stream() <-chan string {
 			}
 
 			if insert.Len() == 0 {
-				fmt.Fprintf(&insert, "INSERT INTO %s VALUES ", table.NameEsc())
+				fmt.Fprintf(&insert, "INSERT INTO %s (%s) VALUES ", table.NameEsc(), table.columnsList())
 			} else {
 				insert.WriteString(",")
 			}
