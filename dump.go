@@ -301,48 +301,67 @@ func (table *table) CreateSQL() (string, error) {
 	return tableSQL.String, nil
 }
 
-func (table *table) Init() (err error) {
-	if len(table.values) != 0 {
-		return errors.New("can't init twice")
-	}
-
-	var columns []string
-
+func (table *table) getColumnsToDump() ([]string, error) {
 	colInfo, err := table.data.tx.Query("SHOW COLUMNS FROM " + table.NameEsc())
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	var result []string
 
 	for colInfo.Next() {
 		cols, err := colInfo.Columns()
 		if err != nil {
-			return err
+			return nil, err
 		}
 
+		// Allocate and link space to scan to this must be done every iteration
 		info := make([]sql.NullString, len(cols))
 		scans := make([]interface{}, len(cols))
 		for i := range info {
 			scans[i] = &info[i]
 		}
 
+		// Read into the pointers to the info marker
 		if err := colInfo.Scan(scans...); err != nil {
-			return err
+			return nil, err
 		}
 
-		// ignore all extras with VIRTUAL
-
-		if info[0].String == "cert_blob_lookup_hash" {
-			fmt.Println("this is a thing")
+		// Find the the fields we care about
+		var field, extra *sql.NullString
+		for i, col := range cols {
+			switch col {
+			case "Field", "field":
+				field = &info[i]
+			case "Extra", "extra":
+				extra = &info[i]
+			}
+			if field != nil && extra != nil {
+				break
+			}
 		}
 
-		columns = append(columns, "`"+info[0].String+"`")
+		if !extra.Valid || !strings.Contains(extra.String, "VIRTUAL") {
+			result = append(result, "`"+field.String+"`")
+		}
+	}
+	return result, nil
+}
+
+func (table *table) Init() error {
+	if len(table.values) != 0 {
+		return errors.New("can't init twice")
+	}
+
+	columns, err := table.getColumnsToDump()
+	if err != nil {
+		return err
 	}
 
 	if len(columns) == 0 {
-		return errors.New("No columns in table " + table.Name + ".")
+		// No data to dump since this is a virtual table
+		return nil
 	}
-
-	// Total query plus sanitization
 
 	table.rows, err = table.data.tx.Query("SELECT " + strings.Join(columns, ",") + " FROM " + table.NameEsc())
 	if err != nil {
