@@ -320,6 +320,22 @@ func (table *table) initColumnData() error {
 		scans[i] = &info[i]
 	}
 
+	fieldIndex, extraIndex := -1, -1
+	for i, col := range cols {
+		switch col {
+		case "Field", "field":
+			fieldIndex = i
+		case "Extra", "extra":
+			extraIndex = i
+		}
+		if fieldIndex > 0 && extraIndex > 0 {
+			break
+		}
+	}
+	if fieldIndex <= 0 || extraIndex < 0 {
+		return errors.New("database column information is malformed")
+	}
+
 	var result []string
 	for colInfo.Next() {
 		// Read into the pointers to the info marker
@@ -327,22 +343,8 @@ func (table *table) initColumnData() error {
 			return err
 		}
 
-		// Find the the fields we care about
-		var field, extra *sql.NullString
-		for i, col := range cols {
-			switch col {
-			case "Field", "field":
-				field = &info[i]
-			case "Extra", "extra":
-				extra = &info[i]
-			}
-			if field != nil && extra != nil {
-				break
-			}
-		}
-
-		if !extra.Valid || !strings.Contains(extra.String, "VIRTUAL") {
-			result = append(result, field.String)
+		if !info[extraIndex].Valid || !strings.Contains(info[extraIndex].String, "VIRTUAL") {
+			result = append(result, info[fieldIndex].String)
 		}
 	}
 	table.cols = result
