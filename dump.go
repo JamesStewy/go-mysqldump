@@ -314,12 +314,6 @@ func (table *table) initColumnData() error {
 		return err
 	}
 
-	info := make([]sql.NullString, len(cols))
-	scans := make([]interface{}, len(cols))
-	for i := range info {
-		scans[i] = &info[i]
-	}
-
 	fieldIndex, extraIndex := -1, -1
 	for i, col := range cols {
 		switch col {
@@ -334,6 +328,12 @@ func (table *table) initColumnData() error {
 	}
 	if fieldIndex < 0 || extraIndex < 0 {
 		return errors.New("database column information is malformed")
+	}
+
+	info := make([]sql.NullString, len(cols))
+	scans := make([]interface{}, len(cols))
+	for i := range info {
+		scans[i] = &info[i]
 	}
 
 	var result []string
