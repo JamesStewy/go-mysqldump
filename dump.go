@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
 	"text/template"
 	"time"
 )
@@ -39,6 +40,7 @@ type table struct {
 	Name string
 	Err  error
 
+	cols   []string
 	data   *Data
 	rows   *sql.Rows
 	values []interface{}
@@ -218,7 +220,7 @@ func (data *Data) writeTable(table *table) error {
 
 // MARK: get methods
 
-// getTemplates initilaizes the templates on data from the constants in this file
+// getTemplates initializes the templates on data from the constants in this file
 func (data *Data) getTemplates() (err error) {
 	data.headerTmpl, err = template.New("mysqldumpHeader").Parse(headerTmpl)
 	if err != nil {
@@ -300,22 +302,78 @@ func (table *table) CreateSQL() (string, error) {
 	return tableSQL.String, nil
 }
 
-func (table *table) Init() (err error) {
+func (table *table) initColumnData() error {
+	colInfo, err := table.data.tx.Query("SHOW COLUMNS FROM " + table.NameEsc())
+	if err != nil {
+		return err
+	}
+	defer colInfo.Close()
+
+	cols, err := colInfo.Columns()
+	if err != nil {
+		return err
+	}
+
+	fieldIndex, extraIndex := -1, -1
+	for i, col := range cols {
+		switch col {
+		case "Field", "field":
+			fieldIndex = i
+		case "Extra", "extra":
+			extraIndex = i
+		}
+		if fieldIndex >= 0 && extraIndex >= 0 {
+			break
+		}
+	}
+	if fieldIndex < 0 || extraIndex < 0 {
+		return errors.New("database column information is malformed")
+	}
+
+	info := make([]sql.NullString, len(cols))
+	scans := make([]interface{}, len(cols))
+	for i := range info {
+		scans[i] = &info[i]
+	}
+
+	var result []string
+	for colInfo.Next() {
+		// Read into the pointers to the info marker
+		if err := colInfo.Scan(scans...); err != nil {
+			return err
+		}
+
+		// Ignore the virtual columns
+		if !info[extraIndex].Valid || !strings.Contains(info[extraIndex].String, "VIRTUAL") {
+			result = append(result, info[fieldIndex].String)
+		}
+	}
+	table.cols = result
+	return nil
+}
+
+func (table *table) columnsList() string {
+	return "`" + strings.Join(table.cols, "`, `") + "`"
+}
+
+func (table *table) Init() error {
 	if len(table.values) != 0 {
 		return errors.New("can't init twice")
 	}
 
-	table.rows, err = table.data.tx.Query("SELECT * FROM " + table.NameEsc())
-	if err != nil {
+	if err := table.initColumnData(); err != nil {
 		return err
 	}
 
-	columns, err := table.rows.Columns()
+	if len(table.cols) == 0 {
+		// No data to dump since this is a virtual table
+		return nil
+	}
+
+	var err error
+	table.rows, err = table.data.tx.Query("SELECT " + table.columnsList() + " FROM " + table.NameEsc())
 	if err != nil {
 		return err
-	}
-	if len(columns) == 0 {
-		return errors.New("No columns in table " + table.Name + ".")
 	}
 
 	tt, err := table.rows.ColumnTypes()
@@ -323,24 +381,38 @@ func (table *table) Init() (err error) {
 		return err
 	}
 
-	var t reflect.Type
 	table.values = make([]interface{}, len(tt))
 	for i, tp := range tt {
-		st := tp.ScanType()
-		if tp.DatabaseTypeName() == "BLOB" {
-			t = reflect.TypeOf(sql.RawBytes{})
-		} else if st != nil && (st.Kind() == reflect.Int ||
-			st.Kind() == reflect.Int8 ||
-			st.Kind() == reflect.Int16 ||
-			st.Kind() == reflect.Int32 ||
-			st.Kind() == reflect.Int64) {
-			t = reflect.TypeOf(sql.NullInt64{})
-		} else {
-			t = reflect.TypeOf(sql.NullString{})
-		}
-		table.values[i] = reflect.New(t).Interface()
+		table.values[i] = reflect.New(reflectColumnType(tp)).Interface()
 	}
 	return nil
+}
+
+func reflectColumnType(tp *sql.ColumnType) reflect.Type {
+	// reflect for scanable
+	switch tp.ScanType().Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return reflect.TypeOf(sql.NullInt64{})
+	case reflect.Float32, reflect.Float64:
+		return reflect.TypeOf(sql.NullFloat64{})
+	case reflect.String:
+		return reflect.TypeOf(sql.NullString{})
+	}
+
+	// determine by name
+	switch tp.DatabaseTypeName() {
+	case "BLOB", "BINARY":
+		return reflect.TypeOf(sql.RawBytes{})
+	case "VARCHAR", "TEXT", "DECIMAL":
+		return reflect.TypeOf(sql.NullString{})
+	case "BIGINT", "TINYINT", "INT":
+		return reflect.TypeOf(sql.NullInt64{})
+	case "DOUBLE":
+		return reflect.TypeOf(sql.NullFloat64{})
+	}
+
+	// unknown datatype
+	return tp.ScanType()
 }
 
 func (table *table) Next() bool {
@@ -394,6 +466,12 @@ func (table *table) RowBuffer() *bytes.Buffer {
 			} else {
 				b.WriteString(nullType)
 			}
+		case *sql.NullFloat64:
+			if s.Valid {
+				fmt.Fprintf(&b, "%f", s.Float64)
+			} else {
+				b.WriteString(nullType)
+			}
 		case *sql.RawBytes:
 			if len(*s) == 0 {
 				b.WriteString(nullType)
@@ -425,7 +503,7 @@ func (table *table) Stream() <-chan string {
 			}
 
 			if insert.Len() == 0 {
-				fmt.Fprintf(&insert, "INSERT INTO %s VALUES ", table.NameEsc())
+				fmt.Fprint(&insert, "INSERT INTO ", table.NameEsc(), " (", table.columnsList(), ") VALUES ")
 			} else {
 				insert.WriteString(",")
 			}
