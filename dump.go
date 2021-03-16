@@ -57,13 +57,11 @@ DROP TABLE IF EXISTS {{ .Name }};
 -- Dumping data for table {{ .Name }}
 --
 
-LOCK TABLES {{ .Name }} WRITE;
-/*!40000 ALTER TABLE {{ .Name }} DISABLE KEYS */;
+BEGIN;
 {{ if .Values }}
 INSERT INTO {{ .Name }} VALUES {{ .Values }};
 {{ end }}
-/*!40000 ALTER TABLE {{ .Name }} ENABLE KEYS */;
-UNLOCK TABLES;
+COMMIT;
 {{ end }}
 -- Dump completed on {{ .CompleteTime }}
 `
