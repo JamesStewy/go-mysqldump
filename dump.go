@@ -26,7 +26,7 @@ type dump struct {
 
 const version = "0.2.2"
 
-const tmpl = `-- Go SQL Dump {{ .DumpVersion }}
+const tmplWithData = `-- Go SQL Dump {{ .DumpVersion }}
 --
 -- ------------------------------------------------------
 -- Server version	{{ .ServerVersion }}
@@ -66,8 +66,42 @@ COMMIT;
 -- Dump completed on {{ .CompleteTime }}
 `
 
+const tmpl = `-- Go SQL Dump {{ .DumpVersion }}
+--
+-- ------------------------------------------------------
+-- Server version	{{ .ServerVersion }}
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+
+{{range .Tables}}
+--
+-- Table structure for table {{ .Name }}
+--
+
+DROP TABLE IF EXISTS {{ .Name }};
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+{{ .SQL }};
+/*!40101 SET character_set_client = @saved_cs_client */;
+--
+-- Dumping data for table {{ .Name }}
+--
+{{ end }}
+-- Dump completed on {{ .CompleteTime }}
+`
+
 // Creates a MYSQL Dump based on the options supplied through the dumper.
-func (d *Dumper) Dump() (string, error) {
+func (d *Dumper) Dump(withData bool) (string, error) {
 	name := time.Now().Format(d.format)
 	p := path.Join(d.dir, name+".sql")
 
@@ -103,7 +137,7 @@ func (d *Dumper) Dump() (string, error) {
 
 	// Get sql for each table
 	for _, name := range tables {
-		if t, err := createTable(d.db, name); err == nil {
+		if t, err := createTable(d.db, name, withData); err == nil {
 			data.Tables = append(data.Tables, t)
 		} else {
 			return p, err
@@ -114,7 +148,14 @@ func (d *Dumper) Dump() (string, error) {
 	data.CompleteTime = time.Now().String()
 
 	// Write dump to file
-	t, err := template.New("mysqldump").Parse(tmpl)
+	var tmplSchema string
+	if withData {
+		tmplSchema = tmplWithData
+	} else {
+		tmplSchema = tmpl
+	}
+
+	t, err := template.New("mysqldump").Parse(tmplSchema)
 	if err != nil {
 		return p, err
 	}
@@ -154,7 +195,7 @@ func getServerVersion(db *sql.DB) (string, error) {
 	return server_version.String, nil
 }
 
-func createTable(db *sql.DB, name string) (*table, error) {
+func createTable(db *sql.DB, name string, withData bool) (*table, error) {
 	var err error
 	t := &table{Name: name}
 
@@ -162,8 +203,10 @@ func createTable(db *sql.DB, name string) (*table, error) {
 		return nil, err
 	}
 
-	if t.Values, err = createTableValues(db, name); err != nil {
-		return nil, err
+	if withData {
+		if t.Values, err = createTableValues(db, name); err != nil {
+			return nil, err
+		}
 	}
 
 	return t, nil
