@@ -100,8 +100,17 @@ DROP TABLE IF EXISTS {{ .Name }};
 -- Dump completed on {{ .CompleteTime }}
 `
 
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}
+
 // Creates a MYSQL Dump based on the options supplied through the dumper.
-func (d *Dumper) Dump(withData bool) (string, error) {
+func (d *Dumper) Dump(withData bool, tableNames []string) (string, error) {
 	name := time.Now().Format(d.format)
 	p := path.Join(d.dir, name+".sql")
 
@@ -137,7 +146,7 @@ func (d *Dumper) Dump(withData bool) (string, error) {
 
 	// Get sql for each table
 	for _, name := range tables {
-		if t, err := createTable(d.db, name, withData); err == nil {
+		if t, err := createTable(d.db, name, withData, tableNames); err == nil {
 			data.Tables = append(data.Tables, t)
 		} else {
 			return p, err
@@ -149,7 +158,7 @@ func (d *Dumper) Dump(withData bool) (string, error) {
 
 	// Write dump to file
 	var tmplSchema string
-	if withData {
+	if withData || contains(tableNames, name) {
 		tmplSchema = tmplWithData
 	} else {
 		tmplSchema = tmpl
@@ -195,7 +204,7 @@ func getServerVersion(db *sql.DB) (string, error) {
 	return server_version.String, nil
 }
 
-func createTable(db *sql.DB, name string, withData bool) (*table, error) {
+func createTable(db *sql.DB, name string, withData bool, tableNames []string) (*table, error) {
 	var err error
 	t := &table{Name: name}
 
@@ -203,7 +212,7 @@ func createTable(db *sql.DB, name string, withData bool) (*table, error) {
 		return nil, err
 	}
 
-	if withData {
+	if withData || contains(tableNames, name) {
 		if t.Values, err = createTableValues(db, name); err != nil {
 			return nil, err
 		}
