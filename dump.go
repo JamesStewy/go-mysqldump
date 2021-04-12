@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -25,7 +26,7 @@ type dump struct {
 
 const version = "0.2.2"
 
-const tmpl = `-- Go SQL Dump {{ .DumpVersion }}
+const tmplWithData = `-- Go SQL Dump {{ .DumpVersion }}
 --
 -- ------------------------------------------------------
 -- Server version	{{ .ServerVersion }}
@@ -56,19 +57,26 @@ DROP TABLE IF EXISTS {{ .Name }};
 -- Dumping data for table {{ .Name }}
 --
 
-LOCK TABLES {{ .Name }} WRITE;
-/*!40000 ALTER TABLE {{ .Name }} DISABLE KEYS */;
+BEGIN;
 {{ if .Values }}
 INSERT INTO {{ .Name }} VALUES {{ .Values }};
 {{ end }}
-/*!40000 ALTER TABLE {{ .Name }} ENABLE KEYS */;
-UNLOCK TABLES;
+COMMIT;
 {{ end }}
 -- Dump completed on {{ .CompleteTime }}
 `
 
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}
+
 // Creates a MYSQL Dump based on the options supplied through the dumper.
-func (d *Dumper) Dump() (string, error) {
+func (d *Dumper) Dump(withData bool, tableNames []string) (string, error) {
 	name := time.Now().Format(d.format)
 	p := path.Join(d.dir, name+".sql")
 
@@ -104,18 +112,16 @@ func (d *Dumper) Dump() (string, error) {
 
 	// Get sql for each table
 	for _, name := range tables {
-		if t, err := createTable(d.db, name); err == nil {
+		if t, err := createTable(d.db, name, withData, tableNames); err == nil {
 			data.Tables = append(data.Tables, t)
 		} else {
 			return p, err
 		}
 	}
-
 	// Set complete time
 	data.CompleteTime = time.Now().String()
 
-	// Write dump to file
-	t, err := template.New("mysqldump").Parse(tmpl)
+	t, err := template.New("mysqldump").Parse(tmplWithData)
 	if err != nil {
 		return p, err
 	}
@@ -155,7 +161,7 @@ func getServerVersion(db *sql.DB) (string, error) {
 	return server_version.String, nil
 }
 
-func createTable(db *sql.DB, name string) (*table, error) {
+func createTable(db *sql.DB, name string, withData bool, tableNames []string) (*table, error) {
 	var err error
 	t := &table{Name: name}
 
@@ -163,8 +169,11 @@ func createTable(db *sql.DB, name string) (*table, error) {
 		return nil, err
 	}
 
-	if t.Values, err = createTableValues(db, name); err != nil {
-		return nil, err
+	if withData || contains(tableNames, name) {
+		t.Values, err = createTableValues(db, name)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return t, nil
@@ -226,7 +235,7 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 
 		for key, value := range data {
 			if value != nil && value.Valid {
-				dataStrings[key] = "'" + value.String + "'"
+				dataStrings[key] = "'" + valueReplace(value.String) + "'"
 			} else {
 				dataStrings[key] = "null"
 			}
@@ -236,4 +245,9 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 	}
 
 	return strings.Join(data_text, ","), rows.Err()
+}
+
+func valueReplace(value string) string {
+	re := regexp.MustCompile(`["']`)
+	return re.ReplaceAllString(value, "\\${0}${1}")
 }

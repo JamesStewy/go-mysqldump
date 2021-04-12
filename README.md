@@ -1,5 +1,12 @@
 # Go MYSQL Dump
 Create MYSQL dumps in Go without the `mysqldump` CLI as a dependancy.
+If you wish, you can only get the data of the tables you want.
+```
+first parameter get all data
+second parameter get data of specified tables only
+
+dumper.Dump(true,[]string{"tableName1"})
+```
 
 ### Simple Example
 ```go
@@ -53,3 +60,4 @@ func main() {
 
 [![GoDoc](https://godoc.org/github.com/JamesStewy/go-mysqldump?status.svg)](https://godoc.org/github.com/JamesStewy/go-mysqldump)
 [![Build Status](https://travis-ci.org/JamesStewy/go-mysqldump.svg?branch=master)](https://travis-ci.org/JamesStewy/go-mysqldump)
+
