@@ -27,7 +27,7 @@ This example uses the mymysql driver (example 7 https://github.com/ziutek/mymysq
         }
 
         // Register database with mysqldump
-        dumper, err := mysqldump.Register(db, "dumps", time.ANSIC)
+        dumper, err := mysqldump.Register(db, "dumps", time.ANSIC, true)
         if err != nil {
         	fmt.Println("Error registering databse:", err)
         	return

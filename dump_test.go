@@ -267,9 +267,10 @@ func TestDumpOk(t *testing.T) {
 	mock.ExpectQuery("^SELECT (.+) FROM Test_Table$").WillReturnRows(createTableValueRows)
 
 	dumper := &Dumper{
-		db:     db,
-		format: "test_format",
-		dir:    "/tmp/",
+		db:              db,
+		format:          "test_format",
+		dir:             "/tmp/",
+		includeDumpDate: false,
 	}
 
 	path, err := dumper.Dump()
@@ -288,7 +289,7 @@ func TestDumpOk(t *testing.T) {
 		t.Errorf("error was not expected while reading the file: %s", err)
 	}
 
-	result := strings.Replace(strings.Split(string(f), "-- Dump completed")[0], "`", "\\", -1)
+	result := strings.Replace(string(f), "`", "\\", -1)
 
 	expected := `-- Go SQL Dump ` + version + `
 --
