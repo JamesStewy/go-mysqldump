@@ -23,7 +23,7 @@ type dump struct {
 	CompleteTime  string
 }
 
-const version = "0.2.2"
+const version = "0.3.0"
 
 const tmpl = `-- Go SQL Dump {{ .DumpVersion }}
 --
@@ -64,8 +64,9 @@ INSERT INTO {{ .Name }} VALUES {{ .Values }};
 /*!40000 ALTER TABLE {{ .Name }} ENABLE KEYS */;
 UNLOCK TABLES;
 {{ end }}
+{{ if .CompleteTime }}
 -- Dump completed on {{ .CompleteTime }}
-`
+{{ end }}`
 
 // Creates a MYSQL Dump based on the options supplied through the dumper.
 func (d *Dumper) Dump() (string, error) {
@@ -112,7 +113,9 @@ func (d *Dumper) Dump() (string, error) {
 	}
 
 	// Set complete time
-	data.CompleteTime = time.Now().String()
+	if d.includeDumpDate {
+		data.CompleteTime = time.Now().String()
+	}
 
 	// Write dump to file
 	t, err := template.New("mysqldump").Parse(tmpl)

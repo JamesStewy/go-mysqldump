@@ -31,7 +31,7 @@ func main() {
 	}
 
 	// Register database with mysqldump
-	dumper, err := mysqldump.Register(db, dumpDir, dumpFilenameFormat)
+	dumper, err := mysqldump.Register(db, dumpDir, dumpFilenameFormat, true)
 	if err != nil {
 		fmt.Println("Error registering databse:", err)
 		return

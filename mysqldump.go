@@ -8,9 +8,10 @@ import (
 
 // Dumper represents a database.
 type Dumper struct {
-	db     *sql.DB
-	format string
-	dir    string
+	db              *sql.DB
+	format          string
+	dir             string
+	includeDumpDate bool
 }
 
 /*
@@ -19,16 +20,18 @@ Creates a new dumper.
 	db: Database that will be dumped (https://golang.org/pkg/database/sql/#DB).
 	dir: Path to the directory where the dumps will be stored.
 	format: Format to be used to name each dump file. Uses time.Time.Format (https://golang.org/pkg/time/#Time.Format). format appended with '.sql'.
+	includeDumpDate: Whether the dump date should be included in the output.
 */
-func Register(db *sql.DB, dir, format string) (*Dumper, error) {
+func Register(db *sql.DB, dir, format string, includeDumpDate bool) (*Dumper, error) {
 	if !isDir(dir) {
 		return nil, errors.New("Invalid directory")
 	}
 
 	return &Dumper{
-		db:     db,
-		format: format,
-		dir:    dir,
+		db:              db,
+		format:          format,
+		dir:             dir,
+		includeDumpDate: includeDumpDate,
 	}, nil
 }
 
