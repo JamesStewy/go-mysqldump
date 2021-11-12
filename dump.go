@@ -403,7 +403,7 @@ func reflectColumnType(tp *sql.ColumnType) reflect.Type {
 	switch tp.DatabaseTypeName() {
 	case "BLOB", "BINARY":
 		return reflect.TypeOf(sql.RawBytes{})
-	case "VARCHAR", "TEXT", "DECIMAL":
+	case "VARCHAR", "TEXT", "DECIMAL", "JSON":
 		return reflect.TypeOf(sql.NullString{})
 	case "BIGINT", "TINYINT", "INT":
 		return reflect.TypeOf(sql.NullInt64{})
