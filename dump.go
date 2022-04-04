@@ -64,7 +64,9 @@ DROP TABLE IF EXISTS {{ .Name }};
 LOCK TABLES {{ .Name }} WRITE;
 /*!40000 ALTER TABLE {{ .Name }} DISABLE KEYS */;
 
-{{range .Inserts}}{{ if .Values }}INSERT INTO {{ .Name }} VALUES {{ .Values }};{{ end }}{{ end }}
+{{range .Inserts}}
+{{ if .Values }}INSERT INTO {{ .Name }} VALUES {{ .Values }};{{ end }}
+{{ end }}
 
 /*!40000 ALTER TABLE {{ .Name }} ENABLE KEYS */;
 UNLOCK TABLES;
