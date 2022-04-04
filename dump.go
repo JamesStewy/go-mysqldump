@@ -11,8 +11,13 @@ import (
 )
 
 type table struct {
+	Name    string
+	SQL     string
+	Inserts []*insert
+}
+
+type insert struct {
 	Name   string
-	SQL    string
 	Values string
 }
 
@@ -58,9 +63,9 @@ DROP TABLE IF EXISTS {{ .Name }};
 
 LOCK TABLES {{ .Name }} WRITE;
 /*!40000 ALTER TABLE {{ .Name }} DISABLE KEYS */;
-{{ if .Values }}
-INSERT INTO {{ .Name }} VALUES {{ .Values }};
-{{ end }}
+
+{{range .Inserts}}{{ if .Values }}INSERT INTO {{ .Name }} VALUES {{ .Values }};{{ end }}{{ end }}
+
 /*!40000 ALTER TABLE {{ .Name }} ENABLE KEYS */;
 UNLOCK TABLES;
 {{ end }}
@@ -75,6 +80,11 @@ func (d *Dumper) Dump() (string, error) {
 	// Check dump directory
 	if e, _ := exists(p); e {
 		return p, errors.New("Dump '" + name + "' already exists.")
+	}
+
+	// check insertSize
+	if d.insertSize == 0 {
+		return "", errors.New("insertSize cannot be 0")
 	}
 
 	// Create .sql file
@@ -104,7 +114,7 @@ func (d *Dumper) Dump() (string, error) {
 
 	// Get sql for each table
 	for _, name := range tables {
-		if t, err := createTable(d.db, name); err == nil {
+		if t, err := createTable(d.db, name, d.insertSize); err == nil {
 			data.Tables = append(data.Tables, t)
 		} else {
 			return p, err
@@ -155,15 +165,14 @@ func getServerVersion(db *sql.DB) (string, error) {
 	return server_version.String, nil
 }
 
-func createTable(db *sql.DB, name string) (*table, error) {
+func createTable(db *sql.DB, name string, insertSize int) (*table, error) {
 	var err error
 	t := &table{Name: name}
 
 	if t.SQL, err = createTableSQL(db, name); err != nil {
 		return nil, err
 	}
-
-	if t.Values, err = createTableValues(db, name); err != nil {
+	if t.Inserts, err = createTableValues(db, name, insertSize); err != nil {
 		return nil, err
 	}
 
@@ -186,21 +195,23 @@ func createTableSQL(db *sql.DB, name string) (string, error) {
 	return table_sql.String, nil
 }
 
-func createTableValues(db *sql.DB, name string) (string, error) {
+func createTableValues(db *sql.DB, name string, insertSize int) ([]*insert, error) {
+	var ret = make([]*insert, 0)
+
 	// Get Data
 	rows, err := db.Query("SELECT * FROM " + name)
 	if err != nil {
-		return "", err
+		return ret, err
 	}
 	defer rows.Close()
 
 	// Get columns
 	columns, err := rows.Columns()
 	if err != nil {
-		return "", err
+		return ret, err
 	}
 	if len(columns) == 0 {
-		return "", errors.New("No columns in table " + name + ".")
+		return ret, errors.New("No columns in table " + name + ".")
 	}
 
 	// Read data
@@ -219,7 +230,7 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 
 		// Read data
 		if err := rows.Scan(ptrs...); err != nil {
-			return "", err
+			return ret, err
 		}
 
 		dataStrings := make([]string, len(columns))
@@ -235,7 +246,20 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 		data_text = append(data_text, "("+strings.Join(dataStrings, ",")+")")
 	}
 
-	return strings.Join(data_text, ","), rows.Err()
+	dataLen := len(data_text)
+	for i := 0; i < dataLen; i += insertSize {
+		n := i + insertSize
+		if n > dataLen {
+			n = dataLen
+		}
+
+		ret = append(ret, &insert{
+			Name:   name,
+			Values: strings.Join(data_text[i:n], ","),
+		})
+	}
+
+	return ret, rows.Err()
 }
 
 func escapeString(str string) string {

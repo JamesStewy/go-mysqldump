@@ -10,6 +10,8 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 )
 
+const insertSize = 1000
+
 func TestGetTablesOk(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -148,7 +150,7 @@ func TestCreateTableValuesOk(t *testing.T) {
 
 	mock.ExpectQuery("^SELECT (.+) FROM test$").WillReturnRows(rows)
 
-	result, err := createTableValues(db, "test")
+	result, err := createTableValues(db, "test", insertSize)
 	if err != nil {
 		t.Errorf("error was not expected while updating stats: %s", err)
 	}
@@ -158,10 +160,11 @@ func TestCreateTableValuesOk(t *testing.T) {
 		t.Errorf("there were unfulfilled expections: %s", err)
 	}
 
+	res := result[0].Values
 	expectedResult := "('1','test@test.de','Test Name 1'),('2','test2@test.de','Test Name 2')"
 
-	if !reflect.DeepEqual(result, expectedResult) {
-		t.Fatalf("expected %#v, got %#v", expectedResult, result)
+	if !reflect.DeepEqual(res, expectedResult) {
+		t.Fatalf("expected %#v, got %#v", expectedResult, res)
 	}
 }
 
@@ -180,7 +183,7 @@ func TestCreateTableValuesNil(t *testing.T) {
 
 	mock.ExpectQuery("^SELECT (.+) FROM test$").WillReturnRows(rows)
 
-	result, err := createTableValues(db, "test")
+	result, err := createTableValues(db, "test", insertSize)
 	if err != nil {
 		t.Errorf("error was not expected while updating stats: %s", err)
 	}
@@ -190,10 +193,11 @@ func TestCreateTableValuesNil(t *testing.T) {
 		t.Errorf("there were unfulfilled expections: %s", err)
 	}
 
+	res := result[0].Values
 	expectedResult := "('1',null,'Test Name 1'),('2','test2@test.de','Test Name 2'),('3','','Test Name 3')"
 
-	if !reflect.DeepEqual(result, expectedResult) {
-		t.Fatalf("expected %#v, got %#v", expectedResult, result)
+	if !reflect.DeepEqual(res, expectedResult) {
+		t.Fatalf("expected %#v, got %#v", expectedResult, res)
 	}
 }
 
@@ -211,7 +215,7 @@ func TestCreateTableEscapeStrings(t *testing.T) {
 
 	mock.ExpectQuery("^SELECT (.+) FROM test$").WillReturnRows(rows)
 
-	result, err := createTableValues(db, "test")
+	result, err := createTableValues(db, "test", insertSize)
 	if err != nil {
 		t.Errorf("error was not expected while updating stats: %s", err)
 	}
@@ -221,10 +225,11 @@ func TestCreateTableEscapeStrings(t *testing.T) {
 		t.Errorf("there were unfulfilled expections: %s", err)
 	}
 
+	res := result[0].Values
 	expectedResult := `('1','Test Single \' Quote'),('2','Test Double \" Quote'),('3','Test Backslash \\ Quote'),('4','Test Percentage % Quote')`
 
-	if !reflect.DeepEqual(result, expectedResult) {
-		t.Fatalf("expected %#v, got %#v", expectedResult, result)
+	if !reflect.DeepEqual(res, expectedResult) {
+		t.Fatalf("expected %#v, got %#v", expectedResult, res)
 	}
 
 	defer db.Close()
@@ -247,7 +252,7 @@ func TestCreateTableOk(t *testing.T) {
 	mock.ExpectQuery("^SHOW CREATE TABLE Test_Table$").WillReturnRows(createTableRows)
 	mock.ExpectQuery("^SELECT (.+) FROM Test_Table$").WillReturnRows(createTableValueRows)
 
-	result, err := createTable(db, "Test_Table")
+	result, err := createTable(db, "Test_Table", 1)
 	if err != nil {
 		t.Errorf("error was not expected while updating stats: %s", err)
 	}
@@ -257,10 +262,22 @@ func TestCreateTableOk(t *testing.T) {
 		t.Errorf("there were unfulfilled expections: %s", err)
 	}
 
-	expectedResult := &table{
+	expectedInsert := make([]*insert, 0)
+
+	expectedInsert = append(expectedInsert, &insert{
 		Name:   "Test_Table",
-		SQL:    "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1",
-		Values: "('1',null,'Test Name 1'),('2','test2@test.de','Test Name 2')",
+		Values: "('1',null,'Test Name 1')",
+	})
+
+	expectedInsert = append(expectedInsert, &insert{
+		Name:   "Test_Table",
+		Values: "('2','test2@test.de','Test Name 2')",
+	})
+
+	expectedResult := &table{
+		Name:    "Test_Table",
+		SQL:     "CREATE TABLE 'Test_Table' (`id` int(11) NOT NULL AUTO_INCREMENT,`s` char(60) DEFAULT NULL, PRIMARY KEY (`id`))ENGINE=InnoDB DEFAULT CHARSET=latin1",
+		Inserts: expectedInsert,
 	}
 
 	if !reflect.DeepEqual(result, expectedResult) {
@@ -299,9 +316,10 @@ func TestDumpOk(t *testing.T) {
 	mock.ExpectQuery("^SELECT (.+) FROM Test_Table$").WillReturnRows(createTableValueRows)
 
 	dumper := &Dumper{
-		db:     db,
-		format: "test_format",
-		dir:    "/tmp/",
+		db:         db,
+		format:     "test_format",
+		dir:        "/tmp/",
+		insertSize: defaultInsertSize,
 	}
 
 	path, err := dumper.Dump()

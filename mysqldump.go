@@ -6,13 +6,17 @@ import (
 	"os"
 )
 
+const defaultInsertSize = 1000
+
 // Dumper represents a database.
 type Dumper struct {
-	db     *sql.DB
-	format string
-	dir    string
+	db         *sql.DB
+	format     string
+	dir        string
+	insertSize int
 }
 
+/*
 /*
 Creates a new dumper.
 
@@ -26,9 +30,10 @@ func Register(db *sql.DB, dir, format string) (*Dumper, error) {
 	}
 
 	return &Dumper{
-		db:     db,
-		format: format,
-		dir:    dir,
+		db:         db,
+		format:     format,
+		dir:        dir,
+		insertSize: defaultInsertSize,
 	}, nil
 }
 
