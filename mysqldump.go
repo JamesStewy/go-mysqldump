@@ -48,6 +48,11 @@ func (d *Dumper) Close() error {
 	return d.db.Close()
 }
 
+// Sets the size of the insert values
+func (d *Dumper) SetInsertSize(size int) {
+	d.insertSize = size
+}
+
 func exists(p string) (bool, os.FileInfo) {
 	f, err := os.Open(p)
 	if err != nil {
