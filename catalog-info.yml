@@ -1,0 +1,15 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: go-mysqldump
+  description: instructions to create MySQL dumps
+  labels:
+  - jira-key: JPXI
+  links:
+  - url: 
+  - url: 
+spec:
+  type: service 
+  lifecycle: production
+  owner: deerstalker
+  system: Pro
